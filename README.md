@@ -1,18 +1,26 @@
-# 🧹 DupeRemover
+# 🧹 DupeRemover v2.0.0
 
 A powerful and flexible tool for removing duplicate lines from text files.
 
 ![Python Version](https://img.shields.io/badge/python-3.6+-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
+![Version](https://img.shields.io/badge/version-2.0.0-brightgreen.svg)
 
 ## ✨ Features
 
 - **Multiple comparison modes** - Remove duplicates based on different criteria
+- **Parallel processing** - Process multiple files simultaneously for better performance
+- **Memory optimization** - Process large files in chunks to minimize memory usage
+- **Directory processing** - Process all text files in directories, optionally recursively
 - **Preserves original order** - Keeps the first occurrence of each unique line
-- **Progress tracking** - Visual progress bar for large files
+- **Multiple output formats** - Generate reports in text, JSON, or HTML
+- **Smart encoding detection** - Automatically detect file encoding
+- **Configurable output** - Save results to a different directory instead of overwriting
+- **Progress tracking** - Visual progress bars for files and processing
+- **Fuzzy matching** - Find near-duplicate lines with configurable similarity threshold
 - **Backup creation** - Optional backups before modifying files
-- **Multiple file support** - Process several files in one command
-- **Command-line interface** - Easy to use with flexible options
+- **Dry run option** - See what would change without modifying files
+- **Comprehensive CLI** - Easy to use with flexible options and argument groups
 
 ## 📋 Requirements
 
@@ -28,9 +36,9 @@ A powerful and flexible tool for removing duplicate lines from text files.
 pip install tqdm
 ```
 
-## 🔍 Usage
+## 🔍 Basic Usage
 
-### Basic usage
+### Process a single file
 
 ```bash
 python main.py your_file.txt
@@ -42,76 +50,148 @@ python main.py your_file.txt
 python main.py file1.txt file2.txt file3.txt
 ```
 
-### Create backups before processing
+### Process all text files in a directory
 
 ```bash
+python main.py -d your_directory/
+```
+
+### Process recursively with a specific pattern
+
+```bash
+python main.py -d your_directory/ -r --pattern "*.log"
+```
+
+## 🔧 Advanced Options
+
+### Input Options
+
+| Option            | Description                                       |
+| ----------------- | ------------------------------------------------- |
+| `-d, --directory` | Process all text files in the specified directory |
+| `-r, --recursive` | Recursively process directories                   |
+| `--pattern`       | File pattern to match (default: \*.txt)           |
+
+### Comparison Options
+
+| Mode                   | Flag                            | Description                                    |
+| ---------------------- | ------------------------------- | ---------------------------------------------- |
+| Case-insensitive       | `--mode case-insensitive`       | Ignores case differences (default)             |
+| Case-sensitive         | `--mode case-sensitive`         | Treats differently cased lines as unique       |
+| Whitespace-insensitive | `--mode whitespace-insensitive` | Ignores all whitespace differences             |
+| Content-hash           | `--mode content-hash`           | Ignores word order in lines                    |
+| Alphanumeric-only      | `--mode alphanumeric-only`      | Ignores all non-alphanumeric characters        |
+| Fuzzy                  | `--mode fuzzy`                  | Finds near-duplicate lines based on similarity |
+
+For fuzzy matching, you can set the similarity threshold:
+
+```bash
+python main.py your_file.txt --mode fuzzy --similarity 0.7
+```
+
+### Output Options
+
+```bash
+# Save results to a different directory
+python main.py your_file.txt -o output_directory/
+
+# Generate an HTML report
+python main.py your_file.txt --report html --report-file report.html
+
+# Save results and generate a JSON report
+python main.py your_file.txt -o output_directory/ --report json --report-file report.json
+```
+
+### Processing Options
+
+```bash
+# Process files in parallel
+python main.py *.txt --parallel
+
+# Specify number of worker processes
+python main.py *.txt --parallel --workers 4
+
+# Process in chunks of 2MB (for large files)
+python main.py large_file.txt --chunk-size 2097152
+```
+
+### Other Options
+
+```bash
+# Create backups before processing
 python main.py your_file.txt --backup
-# or
-python main.py your_file.txt -b
-```
 
-### Show progress bar for large files
-
-```bash
+# Show progress
 python main.py your_file.txt --progress
-# or
-python main.py your_file.txt -p
-```
 
-### Enable verbose logging
+# Enable verbose logging to a file
+python main.py your_file.txt --verbose --log-file process.log
 
-```bash
-python main.py your_file.txt --verbose
-# or
-python main.py your_file.txt -v
-```
-
-### Get help
-
-```bash
-python main.py --help
-```
-
-## 🔄 Comparison Modes
-
-| Mode                   | Flag                            | Description                              |
-| ---------------------- | ------------------------------- | ---------------------------------------- |
-| Case-insensitive       | `--mode case-insensitive`       | Ignores case differences (default)       |
-| Case-sensitive         | `--mode case-sensitive`         | Treats differently cased lines as unique |
-| Whitespace-insensitive | `--mode whitespace-insensitive` | Ignores all whitespace differences       |
-
-Example:
-
-```bash
-python main.py your_file.txt --mode case-sensitive
-# or
-python main.py your_file.txt -m whitespace-insensitive
+# Dry run - don't make changes, just report
+python main.py your_file.txt --dry-run
 ```
 
 ## 📊 Output Example
 
 ```
+=== DupeRemover Results ===
+Generated on: 2025-06-15 14:23:45
+
 SUMMARY:
 Files processed: 3/3
+Files failed: 0
+Total lines processed: 12458
+Total unique lines: 9911
 Total duplicates removed: 2547
-Comparison mode: case-insensitive
+Overall duplication rate: 20.45%
+
+DETAILS:
+file1.txt:
+  - Total lines: 5621
+  - Unique lines: 4532
+  - Duplicates removed: 1089
+  - Duplication rate: 19.37%
+file2.txt:
+  - Total lines: 3542
+  - Unique lines: 2789
+  - Duplicates removed: 753
+  - Duplication rate: 21.26%
+file3.txt:
+  - Total lines: 3295
+  - Unique lines: 2590
+  - Duplicates removed: 705
+  - Duplication rate: 21.40%
+
+Processing completed in 3.24 seconds
 ```
 
-## 🛠️ Advanced Usage
+## 🛠️ Super Advanced Usage
 
-Combine options for more power:
+Combine multiple options for more power:
 
 ```bash
-python main.py *.txt -m whitespace-insensitive -b -p -v
+python main.py -d data/ -r --pattern "*.log" --mode fuzzy --similarity 0.75 \
+  --parallel --workers 8 --chunk-size 4194304 --progress --backup \
+  -o processed/ --report html --report-file report.html --log-file processing.log
 ```
 
 This command will:
 
-- Process all text files in the current directory
-- Use whitespace-insensitive comparison
-- Create backups of all files
+- Process all .log files in the data/ directory and subdirectories
+- Use fuzzy matching with 75% similarity threshold
+- Process files in parallel with 8 workers
+- Use 4MB chunks for processing large files
 - Show progress bars
-- Display verbose logging
+- Create backups before processing
+- Save results to the processed/ directory
+- Generate an HTML report in report.html
+- Save logs to processing.log
+
+## ⚙️ Full Command-Line Help
+
+```bash
+python main.py --help
+```
 
 ## 📝 License
 
