@@ -589,7 +589,7 @@ def parse_arguments():
     
     # Input options
     input_group = parser.add_argument_group('Input Options')
-    input_source = input_group.add_mutually_exclusive_group(required=True)
+    input_source = input_group.add_mutually_exclusive_group()
     input_source.add_argument(
         "files", 
         nargs="*", 
@@ -699,6 +699,13 @@ def main() -> None:
     
     # Setup logging
     setup_logging(args.verbose, args.log_file)
+    
+    # Ensure at least one input source is provided
+    if not args.files and not args.directory:
+        logging.error("Error: No input files or directory specified")
+        print("Please provide either file paths or a directory with the -d option")
+        print("Run 'python main.py --help' for usage information")
+        sys.exit(1)
     
     # Collect all files to process
     file_paths = []
