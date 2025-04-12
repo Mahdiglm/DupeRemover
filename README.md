@@ -21,6 +21,7 @@ A powerful and flexible tool for removing duplicate lines from text files.
 - **Backup creation** - Optional backups before modifying files
 - **Dry run option** - See what would change without modifying files
 - **Comprehensive CLI** - Easy to use with flexible options and argument groups
+- **Thoroughly tested** - Reliable and stable operation
 
 ## 📋 Requirements
 
