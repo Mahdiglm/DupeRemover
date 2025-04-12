@@ -1,10 +1,11 @@
-# 🧹 DupeRemover v2.0.0
+# 🧹 DupeRemover v2.0.0 (Final Release)
 
 A powerful and flexible tool for removing duplicate lines from text files.
 
 ![Python Version](https://img.shields.io/badge/python-3.6+-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Version](https://img.shields.io/badge/version-2.0.0-brightgreen.svg)
+![Status](https://img.shields.io/badge/status-maintenance-yellow.svg)
 
 ## ✨ Features
 
@@ -22,6 +23,29 @@ A powerful and flexible tool for removing duplicate lines from text files.
 - **Dry run option** - See what would change without modifying files
 - **Comprehensive CLI** - Easy to use with flexible options and argument groups
 - **Thoroughly tested** - Reliable and stable operation
+
+## 📢 Project Status
+
+**DupeRemover 2.0.0 is the final planned major release.** The project has reached a feature-complete state with a comprehensive set of capabilities that should address most duplicate removal needs.
+
+### Maintenance Mode
+
+This project is now in maintenance mode, which means:
+
+- No new major features are planned
+- Bug fixes and minor improvements may still be accepted
+- Community contributions are welcome
+
+### Contributing
+
+While active development has concluded, the project remains open to community contributions:
+
+- **Bug fixes**: Corrections for any issues discovered
+- **Performance improvements**: Optimizations that don't change the interface
+- **Platform compatibility**: Updates to ensure compatibility with newer systems
+- **Documentation**: Clarifications or additional examples
+
+To contribute, please submit a pull request with a clear description of your changes and why they're beneficial.
 
 ## 📋 Requirements
 

@@ -1,4 +1,4 @@
-# 🔥 DupeRemover v2.0.0 - Major Upgrade Release
+# 🔥 DupeRemover v2.0.0 - Final Major Release
 
 ## 🚀 Introducing DupeRemover 2.0.0!
 
