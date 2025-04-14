@@ -143,20 +143,78 @@ def remove_duplicates(file_path: str, comparison_mode: str = "case-insensitive",
     Raises:
         FileNotFoundError: If the specified file does not exist
         PermissionError: If the file cannot be read or written
+        ValueError: If invalid parameters are provided
     """
+    # Input validation
+    if not file_path:
+        raise ValueError("File path cannot be empty")
+        
+    if comparison_mode not in ["case-insensitive", "case-sensitive", "whitespace-insensitive", 
+                              "content-hash", "alphanumeric-only", "fuzzy"]:
+        raise ValueError(f"Invalid comparison mode: {comparison_mode}")
+        
+    if similarity_threshold < 0 or similarity_threshold > 1:
+        raise ValueError(f"Similarity threshold must be between 0 and 1, got: {similarity_threshold}")
+        
+    if chunk_size <= 0:
+        raise ValueError(f"Chunk size must be positive, got: {chunk_size}")
+        
+    # If output file is specified, validate it
+    if output_file:
+        try:
+            # Check if the directory exists
+            output_dir = os.path.dirname(output_file)
+            if output_dir and not os.path.exists(output_dir):
+                os.makedirs(output_dir, exist_ok=True)
+                logging.info(f"Created output directory: {output_dir}")
+                
+            # Check if we can write to the output file
+            with open(output_file, 'a', encoding='utf-8') as f:
+                pass
+        except (PermissionError, OSError) as e:
+            raise ValueError(f"Cannot write to output file {output_file}: {str(e)}")
+    
     try:
         # Check if file exists
         if not os.path.isfile(file_path):
             raise FileNotFoundError(f"File not found: {file_path}")
+            
+        # Check if file is readable
+        try:
+            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                f.read(1)
+        except Exception as e:
+            raise PermissionError(f"Cannot read file {file_path}: {str(e)}")
         
         # Get file size for progress tracking
-        file_size = os.path.getsize(file_path)
+        try:
+            file_size = os.path.getsize(file_path)
+            if file_size == 0:
+                logging.warning(f"File {file_path} is empty")
+                
+                # Return early for empty files
+                stats = {
+                    "total_lines": 0,
+                    "unique_lines": 0,
+                    "duplicates_removed": 0,
+                    "file_path": file_path,
+                    "dry_run": dry_run
+                }
+                return stats
+        except OSError as e:
+            logging.warning(f"Could not get file size for {file_path}: {str(e)}")
+            file_size = 0
         
         # Create backup if requested
         if create_backup and not dry_run:
             backup_path = f"{file_path}.bak"
             logging.info(f"Creating backup at: {backup_path}")
-            shutil.copy2(file_path, backup_path)
+            try:
+                shutil.copy2(file_path, backup_path)
+            except Exception as e:
+                logging.warning(f"Failed to create backup at {backup_path}: {str(e)}")
+                if not dry_run:
+                    raise  # Only raise if not in dry run mode
         
         # Detect encoding
         encoding = detect_encoding(file_path)
@@ -173,16 +231,22 @@ def remove_duplicates(file_path: str, comparison_mode: str = "case-insensitive",
             pbar = tqdm(total=file_size, unit='B', unit_scale=True, desc=f"Processing {os.path.basename(file_path)}")
         
         # Process file in chunks for memory efficiency
-        for chunk in chunk_reader(file_path, chunk_size):
+        try:
+            for chunk in chunk_reader(file_path, chunk_size):
+                if pbar:
+                    pbar.update(len('\n'.join(chunk).encode(encoding, errors='ignore')))
+                
+                # Process this chunk of lines
+                chunk_lines, chunk_seen = process_lines(chunk, comparison_mode, show_progress, similarity_threshold)
+                
+                total_lines += len(chunk)
+                unique_lines.extend(chunk_lines)
+                seen_lines.update(chunk_seen)
+        except Exception as e:
+            logging.error(f"Error processing file {file_path}: {str(e)}")
             if pbar:
-                pbar.update(len('\n'.join(chunk).encode(encoding)))
-            
-            # Process this chunk of lines
-            chunk_lines, chunk_seen = process_lines(chunk, comparison_mode, show_progress, similarity_threshold)
-            
-            total_lines += len(chunk)
-            unique_lines.extend(chunk_lines)
-            seen_lines.update(chunk_seen)
+                pbar.close()
+            raise
         
         # Close progress bar if it was created
         if pbar:
