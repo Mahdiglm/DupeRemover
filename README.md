@@ -33,14 +33,6 @@
   </p>
 </div>
 
-<!-- DEMO/SCREENSHOT PLACEHOLDER - add an actual screenshot of your tool in action here -->
-<div align="center">
-  <p>
-    <img src="https://via.placeholder.com/800x400?text=DupeRemover+in+Action" alt="DupeRemover Screenshot" width="800">
-  </p>
-  <p><i>Remove duplicates from your text files with just one command</i></p>
-</div>
-
 <p align="center">
   <a href="#key-features">Features</a> •
   <a href="#installation">Installation</a> •
