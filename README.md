@@ -8,7 +8,7 @@
 
   <!-- BADGES -->
   <p align="center">
-    <a href="https://github.com/Mahdiglm/DupeRemover/releases"><img src="https://img.shields.io/badge/version-2.0.1-brightgreen.svg?style=for-the-badge" alt="Version"></a>
+    <a href="https://github.com/Mahdiglm/DupeRemover/releases"><img src="https://img.shields.io/badge/version-2.0.2-brightgreen.svg?style=for-the-badge" alt="Version"></a>
     <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.6+-blue.svg?style=for-the-badge&logo=python&logoColor=white" alt="Python"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge" alt="License"></a>
     <a href="#project-status"><img src="https://img.shields.io/badge/status-maintenance-yellow.svg?style=for-the-badge" alt="Status"></a>
@@ -79,7 +79,14 @@ DupeRemover helps you eliminate duplicate content from text files while providin
 
 ### Comprehensive Reporting
 
-- **Multiple output formats** (Text, JSON, HTML)
+- **Multiple output formats**:
+  - Text - Simple human-readable format
+  - JSON - For programmatic processing
+  - HTML - For visual presentation in browsers
+  - CSV - For spreadsheet compatibility
+  - XML - For structured data processing
+  - YAML - For configuration-style output
+  - Markdown - For documentation-friendly reports
 - **Detailed statistics** on duplication rates
 - **Visual progress tracking** during processing
 
@@ -239,6 +246,18 @@ python main.py your_file.txt -o output_directory/
 # Generate an HTML report
 python main.py your_file.txt --report html --report-file report.html
 
+# Generate a CSV report for spreadsheet analysis
+python main.py your_file.txt --report csv --report-file report.csv
+
+# Generate an XML report for structured data
+python main.py your_file.txt --report xml --report-file report.xml
+
+# Generate a YAML report for configuration-style output
+python main.py your_file.txt --report yaml --report-file report.yaml
+
+# Generate a Markdown report for documentation
+python main.py your_file.txt --report markdown --report-file report.md
+
 # Save results and generate a JSON report
 python main.py your_file.txt -o output_directory/ --report json --report-file report.json
 ```
@@ -331,7 +350,7 @@ python main.py --help
 
 ## Project Status
 
-DupeRemover 2.0.1 is in **maintenance mode**. This means:
+DupeRemover 2.0.2 is in **maintenance mode**. This means:
 
 - The project has reached feature-complete status
 - Bug fixes and minor improvements are still accepted
