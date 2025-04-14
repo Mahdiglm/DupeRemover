@@ -183,8 +183,12 @@ def remove_duplicates(file_path: str, comparison_mode: str = "case-insensitive",
         try:
             with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
                 f.read(1)
+        except PermissionError as e:
+            raise PermissionError(f"Permission denied: Cannot read file {file_path}: {str(e)}")
+        except OSError as e:
+            raise OSError(f"Operating system error when reading {file_path}: {str(e)}")
         except Exception as e:
-            raise PermissionError(f"Cannot read file {file_path}: {str(e)}")
+            raise ValueError(f"Cannot read file {file_path}: {str(e)}")
         
         # Get file size for progress tracking
         try:
