@@ -86,8 +86,25 @@ def detect_encoding(file_path: str) -> str:
     Returns:
         Detected encoding or 'utf-8' as fallback
     """
-    encodings = ['utf-8', 'latin-1', 'utf-16', 'ascii']
+    # Expanded list of encodings to try, in order of preference
+    encodings = ['utf-8', 'latin-1', 'utf-16', 'utf-16-le', 'utf-16-be', 'ascii', 'cp1252', 'iso-8859-1']
     
+    # First, try to use chardet if available for more accurate detection
+    try:
+        import chardet
+        with open(file_path, 'rb') as file:
+            sample = file.read(4096)  # Read larger sample for better detection
+            if sample:
+                result = chardet.detect(sample)
+                if result['confidence'] > 0.7:  # Only accept high confidence detections
+                    logging.info(f"Detected encoding with chardet: {result['encoding']} ({result['confidence']:.2f} confidence)")
+                    return result['encoding']
+    except ImportError:
+        logging.debug("chardet module not available, falling back to manual detection")
+    except Exception as e:
+        logging.debug(f"Error using chardet: {str(e)}")
+    
+    # Fallback to manual detection
     for encoding in encodings:
         try:
             with open(file_path, 'r', encoding=encoding, errors='ignore') as file:
@@ -95,7 +112,11 @@ def detect_encoding(file_path: str) -> str:
                 return encoding
         except UnicodeDecodeError:
             continue
+        except Exception as e:
+            logging.debug(f"Error checking encoding {encoding}: {str(e)}")
     
+    # If all else fails, use UTF-8 with fallback
+    logging.warning(f"Could not confidently detect encoding for {file_path}, using UTF-8 as fallback")
     return 'utf-8'  # Default fallback
 
 
