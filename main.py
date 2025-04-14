@@ -634,7 +634,7 @@ def generate_report(results: List[Dict], output_format: str = "text",
     
     Args:
         results: List of result dictionaries
-        output_format: Format for the report ('text', 'json', 'html', 'csv', 'xml', or 'yaml')
+        output_format: Format for the report ('text', 'json', 'html', 'csv', 'xml', 'yaml', or 'markdown')
         report_file: Optional path to write the report to
         
     Returns:
@@ -656,7 +656,37 @@ def generate_report(results: List[Dict], output_format: str = "text",
     total_unique = sum(r.get('unique_lines', 0) for r in successful)
     total_removed = sum(r.get('duplicates_removed', 0) for r in successful)
     
-    if output_format == "yaml":
+    if output_format == "markdown":
+        lines = [
+            "# DupeRemover Results",
+            f"*Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*",
+            "",
+            "## Summary",
+            "",
+            f"- **Files processed:** {total_processed}/{len(results)}",
+            f"- **Files failed:** {total_failed}",
+            f"- **Total lines processed:** {total_lines}",
+            f"- **Total unique lines:** {total_unique}",
+            f"- **Total duplicates removed:** {total_removed}",
+            f"- **Overall duplication rate:** {(total_removed / total_lines * 100):.2f}% (if applicable)" if total_lines > 0 else "- **Overall duplication rate:** 0.00% (if applicable)",
+            "",
+            "## Details",
+            "",
+            "| File | Total Lines | Unique Lines | Duplicates Removed | Duplication Rate | Status |",
+            "|------|-------------|--------------|-------------------|-----------------|--------|"
+        ]
+        
+        for r in results:
+            if "error" in r:
+                lines.append(f"| {r['file_path']} | - | - | - | - | ❌ **ERROR:** {r['error']} |")
+            else:
+                duplication_rate = f"{(r['duplicates_removed'] / r['total_lines'] * 100):.2f}%" if r['total_lines'] > 0 else "0.00%"
+                status = "⚠️ **DRY RUN**" if r.get('dry_run', False) else "✅ **Success**"
+                lines.append(f"| {r['file_path']} | {r['total_lines']} | {r['unique_lines']} | {r['duplicates_removed']} | {duplication_rate} | {status} |")
+        
+        output = "\n".join(lines)
+    
+    elif output_format == "yaml":
         try:
             import yaml
             report = {
@@ -918,7 +948,7 @@ def parse_arguments():
     )
     output_group.add_argument(
         "--report",
-        choices=["text", "json", "html", "csv", "xml", "yaml"],
+        choices=["text", "json", "html", "csv", "xml", "yaml", "markdown"],
         default="text",
         help="Format for the results report (default: text)"
     )
