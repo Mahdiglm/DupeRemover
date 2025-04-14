@@ -1,30 +1,43 @@
-# 🧹 DupeRemover v2.0.0 (Final Release)
+# DupeRemover v2.0.0 (Final Release)
 
-A powerful and flexible tool for removing duplicate lines from text files.
+<div align="center">
+  <img src="https://img.shields.io/badge/python-3.6+-blue.svg" alt="Python Version" />
+  <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License" />
+  <img src="https://img.shields.io/badge/version-2.0.0-brightgreen.svg" alt="Version" />
+  <img src="https://img.shields.io/badge/status-maintenance-yellow.svg" alt="Status" />
+</div>
 
-![Python Version](https://img.shields.io/badge/python-3.6+-blue.svg)
-![License](https://img.shields.io/badge/license-MIT-green.svg)
-![Version](https://img.shields.io/badge/version-2.0.0-brightgreen.svg)
-![Status](https://img.shields.io/badge/status-maintenance-yellow.svg)
+<hr>
 
-## ✨ Features
+**DupeRemover** is a powerful and flexible tool for removing duplicate lines from text files. It offers advanced processing capabilities with an intuitive command-line interface.
 
-- **Multiple comparison modes** - Remove duplicates based on different criteria
-- **Parallel processing** - Process multiple files simultaneously for better performance
-- **Memory optimization** - Process large files in chunks to minimize memory usage
-- **Directory processing** - Process all text files in directories, optionally recursively
-- **Preserves original order** - Keeps the first occurrence of each unique line
-- **Multiple output formats** - Generate reports in text, JSON, or HTML
-- **Smart encoding detection** - Automatically detect file encoding
-- **Configurable output** - Save results to a different directory instead of overwriting
-- **Progress tracking** - Visual progress bars for files and processing
-- **Fuzzy matching** - Find near-duplicate lines with configurable similarity threshold
-- **Backup creation** - Optional backups before modifying files
-- **Dry run option** - See what would change without modifying files
-- **Comprehensive CLI** - Easy to use with flexible options and argument groups
-- **Thoroughly tested** - Reliable and stable operation
+<hr>
 
-## 📢 Project Status
+## Features
+
+**Comparison & Processing**
+
+- Multiple comparison modes for identifying duplicates based on different criteria
+- Parallel processing across multiple files for improved performance
+- Memory-efficient chunk processing for handling extremely large files
+- Directory processing with recursive search capabilities
+- Original line order preservation, keeping first occurrence of each unique line
+
+**Output & Reporting**
+
+- Multiple output formats (text, JSON, HTML) for flexible reporting
+- Smart file encoding detection to handle various file types
+- Configurable output paths to preserve original files
+- Detailed progress tracking with visual indicators
+
+**Safety & Convenience**
+
+- Backup creation to protect original data
+- Dry run mode to preview changes without modifying files
+- Thoroughly tested for reliable and stable operation
+- Comprehensive command-line interface with logical option groups
+
+## Project Status
 
 **DupeRemover 2.0.0 is the final planned major release.** The project has reached a feature-complete state with a comprehensive set of capabilities that should address most duplicate removal needs.
 
@@ -47,12 +60,12 @@ While active development has concluded, the project remains open to community co
 
 To contribute, please submit a pull request with a clear description of your changes and why they're beneficial.
 
-## 📋 Requirements
+## Requirements
 
 - Python 3.6+
 - tqdm library
 
-## 🚀 Installation
+## Installation
 
 1. Clone this repository or download the main script
 2. Install the required dependency:
@@ -61,35 +74,37 @@ To contribute, please submit a pull request with a clear description of your cha
 pip install tqdm
 ```
 
-## 🔍 Basic Usage
+## Usage Guide
 
-### Process a single file
+### Basic Usage
+
+**Process a single file**
 
 ```bash
 python main.py your_file.txt
 ```
 
-### Process multiple files
+**Process multiple files**
 
 ```bash
 python main.py file1.txt file2.txt file3.txt
 ```
 
-### Process all text files in a directory
+**Process all text files in a directory**
 
 ```bash
 python main.py -d your_directory/
 ```
 
-### Process recursively with a specific pattern
+**Process recursively with a specific pattern**
 
 ```bash
 python main.py -d your_directory/ -r --pattern "*.log"
 ```
 
-## 🔧 Advanced Options
+### Advanced Options
 
-### Input Options
+#### Input Options
 
 | Option            | Description                                       |
 | ----------------- | ------------------------------------------------- |
@@ -97,7 +112,7 @@ python main.py -d your_directory/ -r --pattern "*.log"
 | `-r, --recursive` | Recursively process directories                   |
 | `--pattern`       | File pattern to match (default: \*.txt)           |
 
-### Comparison Options
+#### Comparison Options
 
 | Mode                   | Flag                            | Description                                    |
 | ---------------------- | ------------------------------- | ---------------------------------------------- |
@@ -108,13 +123,13 @@ python main.py -d your_directory/ -r --pattern "*.log"
 | Alphanumeric-only      | `--mode alphanumeric-only`      | Ignores all non-alphanumeric characters        |
 | Fuzzy                  | `--mode fuzzy`                  | Finds near-duplicate lines based on similarity |
 
-For fuzzy matching, you can set the similarity threshold:
+**For fuzzy matching, you can set the similarity threshold:**
 
 ```bash
 python main.py your_file.txt --mode fuzzy --similarity 0.7
 ```
 
-### Output Options
+#### Output Options
 
 ```bash
 # Save results to a different directory
@@ -127,7 +142,7 @@ python main.py your_file.txt --report html --report-file report.html
 python main.py your_file.txt -o output_directory/ --report json --report-file report.json
 ```
 
-### Processing Options
+#### Processing Options
 
 ```bash
 # Process files in parallel
@@ -140,7 +155,7 @@ python main.py *.txt --parallel --workers 4
 python main.py large_file.txt --chunk-size 2097152
 ```
 
-### Other Options
+#### Other Options
 
 ```bash
 # Create backups before processing
@@ -156,7 +171,7 @@ python main.py your_file.txt --verbose --log-file process.log
 python main.py your_file.txt --dry-run
 ```
 
-## 📊 Output Example
+## Output Example
 
 ```
 === DupeRemover Results ===
@@ -190,7 +205,7 @@ file3.txt:
 Processing completed in 3.24 seconds
 ```
 
-## 🛠️ Super Advanced Usage
+## Advanced Usage Example
 
 Combine multiple options for more power:
 
@@ -212,16 +227,18 @@ This command will:
 - Generate an HTML report in report.html
 - Save logs to processing.log
 
-## ⚙️ Full Command-Line Help
+## Full Command-Line Help
 
 ```bash
 python main.py --help
 ```
 
-## 📝 License
+## License
 
 MIT License
 
 ---
 
-Made with ❤️ for efficient text processing
+<div align="center">
+  <p>Created for efficient text processing</p>
+</div>
