@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 > **Note:** Version 2.0.0 is the final planned major release. The project is now in maintenance mode, accepting only bug fixes and minor improvements.
 
+## [2.0.2] - 2025-07-01
+
+### Added
+
+- New report format options:
+  - CSV format for spreadsheet compatibility
+  - XML format for structured data processing
+  - YAML format for configuration-style output
+  - Markdown format for documentation-friendly reports
+- Expanded encoding detection with support for additional international character sets
+- Improved error handling with more specific error messages
+
 ## [2.0.1] - 2025-06-18
 
 ### Fixed
