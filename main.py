@@ -293,15 +293,59 @@ def is_fuzzy_duplicate(normalized: str, seen_lines: Set[str], threshold: float) 
     if not normalized or threshold >= 1.0:
         return False
         
-    # For small sets of seen lines, check each one
-    if len(seen_lines) < 1000:
+    # Quick rejection: if there are no words in common, it can't be a duplicate
+    # This speeds up processing significantly for large datasets
+    normalized_words = set(normalized.lower().split())
+    if not normalized_words:  # Empty line
+        return False
+        
+    # For very large seen_lines sets, use a more optimized approach
+    if len(seen_lines) > 10000:
+        # Create an index of common words for faster filtering
+        # This is a simplified version of an inverted index
+        word_to_lines = {}
+        
+        # Sample the seen lines to build a smaller index
+        sample_size = min(1000, len(seen_lines))
+        import random
+        sample = random.sample(list(seen_lines), sample_size) if len(seen_lines) > sample_size else seen_lines
+        
+        # Build word index from the sample
+        for line in sample:
+            words = set(line.lower().split())
+            for word in words:
+                if len(word) > 3:  # Only index longer words for efficiency
+                    if word not in word_to_lines:
+                        word_to_lines[word] = []
+                    word_to_lines[word].append(line)
+        
+        # Find candidates that share words with the normalized line
+        candidates = set()
+        for word in normalized_words:
+            if len(word) > 3 and word in word_to_lines:
+                candidates.update(word_to_lines[word])
+        
+        # Now check similarity only with candidates
+        for candidate in candidates:
+            if calculate_similarity(normalized, candidate) >= threshold:
+                return True
+        
+        # If no candidates or no matches, try a small random sample
+        if len(sample) > 100:
+            small_sample = random.sample(sample, 50)
+            for seen in small_sample:
+                if calculate_similarity(normalized, seen) >= threshold:
+                    return True
+    # For small to medium sets, use the previous approach
+    elif len(seen_lines) < 1000:
         for seen in seen_lines:
             if calculate_similarity(normalized, seen) >= threshold:
                 return True
     else:
-        # For larger sets, only check against a sample to maintain performance
+        # For medium-sized sets, use random sampling
+        import random
         sample_size = min(100, len(seen_lines))
-        sample = list(itertools.islice(seen_lines, sample_size))
+        sample = random.sample(list(seen_lines), sample_size)
         for seen in sample:
             if calculate_similarity(normalized, seen) >= threshold:
                 return True
