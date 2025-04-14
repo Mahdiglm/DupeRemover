@@ -87,7 +87,14 @@ def detect_encoding(file_path: str) -> str:
         Detected encoding or 'utf-8' as fallback
     """
     # Expanded list of encodings to try, in order of preference
-    encodings = ['utf-8', 'latin-1', 'utf-16', 'utf-16-le', 'utf-16-be', 'ascii', 'cp1252', 'iso-8859-1']
+    encodings = [
+        'utf-8', 'latin-1', 'utf-16', 'utf-16-le', 'utf-16-be', 
+        'ascii', 'cp1252', 'iso-8859-1', 'iso-8859-2', 'iso-8859-15',
+        'windows-1250', 'windows-1251', 'windows-1252', 'windows-1253',
+        'windows-1254', 'windows-1255', 'windows-1256', 'windows-1257',
+        'big5', 'gb2312', 'euc-jp', 'shift-jis', 'euc-kr', 'utf-32',
+        'utf-32-le', 'utf-32-be'
+    ]
     
     # First, try to use chardet if available for more accurate detection
     try:
