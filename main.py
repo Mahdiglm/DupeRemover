@@ -623,7 +623,7 @@ def generate_report(results: List[Dict], output_format: str = "text",
     
     Args:
         results: List of result dictionaries
-        output_format: Format for the report ('text', 'json', 'html', or 'csv')
+        output_format: Format for the report ('text', 'json', 'html', 'csv', or 'xml')
         report_file: Optional path to write the report to
         
     Returns:
@@ -633,6 +633,8 @@ def generate_report(results: List[Dict], output_format: str = "text",
     from datetime import datetime
     import csv
     import io
+    import xml.dom.minidom as md
+    from xml.etree import ElementTree as ET
     
     successful = [r for r in results if "error" not in r]
     failed = [r for r in results if "error" in r]
@@ -747,6 +749,47 @@ def generate_report(results: List[Dict], output_format: str = "text",
         
         output = csv_output.getvalue()
     
+    elif output_format == "xml":
+        # Create XML structure
+        root = ET.Element("DupeRemover")
+        root.set("timestamp", datetime.now().isoformat())
+        
+        # Add summary section
+        summary = ET.SubElement(root, "Summary")
+        ET.SubElement(summary, "FilesProcessed").text = str(total_processed)
+        ET.SubElement(summary, "FilesFailed").text = str(total_failed)
+        ET.SubElement(summary, "TotalLines").text = str(total_lines)
+        ET.SubElement(summary, "UniqueLines").text = str(total_unique)
+        ET.SubElement(summary, "DuplicatesRemoved").text = str(total_removed)
+        
+        duplication_rate = (total_removed / total_lines * 100) if total_lines > 0 else 0
+        ET.SubElement(summary, "DuplicationRate").text = f"{duplication_rate:.2f}%"
+        
+        # Add details section
+        details = ET.SubElement(root, "Details")
+        
+        # Add file results
+        for r in results:
+            file_elem = ET.SubElement(details, "File")
+            ET.SubElement(file_elem, "Path").text = r["file_path"]
+            
+            if "error" in r:
+                ET.SubElement(file_elem, "Status").text = "Error"
+                ET.SubElement(file_elem, "Error").text = r["error"]
+            else:
+                ET.SubElement(file_elem, "Status").text = "Dry run" if r.get("dry_run", False) else "Success"
+                ET.SubElement(file_elem, "TotalLines").text = str(r["total_lines"])
+                ET.SubElement(file_elem, "UniqueLines").text = str(r["unique_lines"])
+                ET.SubElement(file_elem, "DuplicatesRemoved").text = str(r["duplicates_removed"])
+                
+                duplication_rate = (r["duplicates_removed"] / r["total_lines"] * 100) if r["total_lines"] > 0 else 0
+                ET.SubElement(file_elem, "DuplicationRate").text = f"{duplication_rate:.2f}%"
+        
+        # Convert to pretty-printed XML
+        rough_string = ET.tostring(root, 'utf-8')
+        reparsed = md.parseString(rough_string)
+        output = reparsed.toprettyxml(indent="  ")
+    
     else:  # text format
         lines = [
             "=== DupeRemover Results ===",
@@ -843,7 +886,7 @@ def parse_arguments():
     )
     output_group.add_argument(
         "--report",
-        choices=["text", "json", "html", "csv"],
+        choices=["text", "json", "html", "csv", "xml"],
         default="text",
         help="Format for the results report (default: text)"
     )
