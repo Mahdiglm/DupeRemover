@@ -54,7 +54,7 @@ def chunk_reader(file_path: str, chunk_size: int = 1024*1024) -> Generator[List[
         Lists of complete lines from the file
     """
     incomplete_line = ''
-    with open(file_path, 'r', encoding='utf-8', errors='replace') as file:
+    with open(file_path, 'r', encoding='utf-8', errors='ignore') as file:
         while True:
             chunk = file.read(chunk_size)
             if not chunk:
@@ -90,7 +90,7 @@ def detect_encoding(file_path: str) -> str:
     
     for encoding in encodings:
         try:
-            with open(file_path, 'r', encoding=encoding) as file:
+            with open(file_path, 'r', encoding=encoding, errors='ignore') as file:
                 file.read(1024)  # Read a small sample
                 return encoding
         except UnicodeDecodeError:
@@ -180,8 +180,12 @@ def remove_duplicates(file_path: str, comparison_mode: str = "case-insensitive",
             
             # Write the unique lines
             logging.info(f"Writing {unique_count} unique lines to {target_file}")
-            with open(target_file, 'w', encoding=encoding) as file:
-                file.writelines(unique_lines)
+            try:
+                with open(target_file, 'w', encoding=encoding, errors='ignore') as file:
+                    file.writelines(unique_lines)
+            except Exception as e:
+                logging.error(f"Error writing to {target_file}: {str(e)}")
+                raise
         
         # Return statistics
         stats = {
@@ -572,7 +576,7 @@ def generate_report(results: List[Dict], output_format: str = "text",
     # Write to file if specified
     if report_file:
         try:
-            with open(report_file, 'w', encoding='utf-8') as file:
+            with open(report_file, 'w', encoding='utf-8', errors='ignore') as file:
                 file.write(output)
             logging.info(f"Report written to {report_file}")
         except Exception as e:
@@ -593,7 +597,8 @@ def parse_arguments():
     input_source.add_argument(
         "files", 
         nargs="*", 
-        help="One or more text files to process"
+        help="One or more text files to process",
+        default=[]
     )
     input_source.add_argument(
         "-d", "--directory",

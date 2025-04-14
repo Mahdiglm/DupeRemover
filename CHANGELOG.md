@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 > **Note:** Version 2.0.0 is the final planned major release. The project is now in maintenance mode, accepting only bug fixes and minor improvements.
 
+## [2.0.1] - 2025-06-18
+
+### Fixed
+
+- Improved handling of encoding errors by using 'ignore' mode consistently throughout the codebase
+- Fixed issues with files that have mixed or non-standard encodings
+- Enhanced error reporting for file read/write operations
+
 ## [2.0.0] - 2025-06-15
 
 ### Added

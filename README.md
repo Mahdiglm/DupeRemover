@@ -1,10 +1,10 @@
 <div align="center">
 
-# DupeRemover v2.0.0 (Final Release)
+# DupeRemover v2.0.1 (Maintenance Release)
 
   <img src="https://img.shields.io/badge/python-3.6+-blue.svg" alt="Python Version" />
   <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License" />
-  <img src="https://img.shields.io/badge/version-2.0.0-brightgreen.svg" alt="Version" />
+  <img src="https://img.shields.io/badge/version-2.0.1-brightgreen.svg" alt="Version" />
   <img src="https://img.shields.io/badge/status-maintenance-yellow.svg" alt="Status" />
 </div>
 
