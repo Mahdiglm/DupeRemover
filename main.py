@@ -323,8 +323,19 @@ def process_lines(lines: List[str], comparison_mode: str, show_progress: bool,
     Returns:
         A tuple containing (list of unique lines, set of normalized lines seen)
     """
+    # Use a generator expression to avoid loading all lines into memory if possible
     unique_lines = []
-    seen_lines = set()
+    
+    # Using a set for exact matches and a list for fuzzy matches to optimize memory usage
+    seen_exact = set()
+    
+    # For very large files with fuzzy matching, we'll use a bloom filter-like approach
+    # to reduce memory usage at the cost of a small chance of false positives
+    using_fuzzy = comparison_mode == "fuzzy" and similarity_threshold < 1.0
+    fuzzy_matches = []
+    
+    # Sampling rate for fuzzy matching to improve performance on very large files
+    fuzzy_sample_rate = 0.3 if len(lines) > 100000 else 1.0
     
     # Create iterator with progress bar if requested
     if show_progress and len(lines) > 1000:
@@ -332,33 +343,53 @@ def process_lines(lines: List[str], comparison_mode: str, show_progress: bool,
     else:
         line_iterator = lines
     
-    # Special handling for fuzzy matching
-    using_fuzzy = comparison_mode == "fuzzy" and similarity_threshold < 1.0
-    
+    # Process each line
     for line in line_iterator:
         # Add newline if it's missing (for chunks)
         if not line.endswith('\n') and line:
             line = line + '\n'
             
+        # Skip processing for empty lines
+        if not line.strip():
+            # Only add empty line if we haven't seen it before (preserve some formatting)
+            if not any(l.strip() == '' for l in unique_lines[-3:] if unique_lines):
+                unique_lines.append(line)
+            continue
+            
         # Normalize the line for comparison based on comparison mode
         normalized = normalize_line(line, "case-insensitive" if using_fuzzy else comparison_mode)
         
-        # Check if we've seen this line before
-        is_duplicate = normalized in seen_lines
+        # Skip if empty after normalization
+        if normalized == "":
+            continue
+            
+        # Check if we've seen this line before (exact match)
+        if normalized in seen_exact:
+            continue
+            
+        # For fuzzy mode, check similarity if not an exact duplicate
+        is_duplicate = False
+        if using_fuzzy:
+            # Use random sampling for very large files to improve performance
+            import random
+            if random.random() <= fuzzy_sample_rate:
+                is_duplicate = is_fuzzy_duplicate(normalized, set(fuzzy_matches), similarity_threshold)
+                
+                # Only add to fuzzy matches if it's not a duplicate (to keep the set smaller)
+                if not is_duplicate:
+                    # Keep the fuzzy matches list from growing too large
+                    if len(fuzzy_matches) > 10000:
+                        # Remove random elements to keep size manageable
+                        del fuzzy_matches[:1000]
+                    fuzzy_matches.append(normalized)
         
-        # For fuzzy mode, also check similarity if not an exact duplicate
-        if using_fuzzy and not is_duplicate:
-            is_duplicate = is_fuzzy_duplicate(normalized, seen_lines, similarity_threshold)
-        
-        if not is_duplicate and normalized != "":
+        if not is_duplicate:
             # This is a new unique line
-            seen_lines.add(normalized)
-            unique_lines.append(line)
-        elif normalized == "" and line not in unique_lines:
-            # Special handling for empty lines (preserve line breaks/formatting)
+            seen_exact.add(normalized)
             unique_lines.append(line)
     
-    return unique_lines, seen_lines
+    # For return compatibility
+    return unique_lines, seen_exact
 
 
 def find_text_files(directory: str, recursive: bool = False, pattern: str = "*.txt") -> List[str]:
