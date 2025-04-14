@@ -1,7 +1,7 @@
 """
 duplicate_remover.py - Removes duplicates from text files with various comparison options.
 Supports multiple files, progress tracking, and backup creation.
-Version 2.0.0 - Enhanced with parallel processing, directory support, and more advanced features.
+Version 2.0.2 - Enhanced with additional report formats and improved compatibility.
 """
 
 import os
