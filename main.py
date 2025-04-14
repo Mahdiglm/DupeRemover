@@ -623,7 +623,7 @@ def generate_report(results: List[Dict], output_format: str = "text",
     
     Args:
         results: List of result dictionaries
-        output_format: Format for the report ('text', 'json', or 'html')
+        output_format: Format for the report ('text', 'json', 'html', or 'csv')
         report_file: Optional path to write the report to
         
     Returns:
@@ -631,6 +631,8 @@ def generate_report(results: List[Dict], output_format: str = "text",
     """
     import json
     from datetime import datetime
+    import csv
+    import io
     
     successful = [r for r in results if "error" not in r]
     failed = [r for r in results if "error" in r]
@@ -704,6 +706,47 @@ def generate_report(results: List[Dict], output_format: str = "text",
         
         output = "\n".join(html)
     
+    elif output_format == "csv":
+        # Use StringIO to build the CSV data as a string
+        csv_output = io.StringIO()
+        csv_writer = csv.writer(csv_output)
+        
+        # Write the header row with timestamp
+        csv_writer.writerow(['DupeRemover Results', f'Generated on: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}'])
+        csv_writer.writerow([])  # Empty row for separation
+        
+        # Write the summary section
+        csv_writer.writerow(['SUMMARY'])
+        csv_writer.writerow(['Files processed', f'{total_processed}/{len(results)}'])
+        csv_writer.writerow(['Files failed', total_failed])
+        csv_writer.writerow(['Total lines processed', total_lines])
+        csv_writer.writerow(['Total unique lines', total_unique])
+        csv_writer.writerow(['Total duplicates removed', total_removed])
+        csv_writer.writerow(['Overall duplication rate', f'{(total_removed / total_lines * 100):.2f}%' if total_lines > 0 else '0.00%'])
+        csv_writer.writerow([])  # Empty row for separation
+        
+        # Write the details section header
+        csv_writer.writerow(['DETAILS'])
+        csv_writer.writerow(['File', 'Total Lines', 'Unique Lines', 'Duplicates Removed', 'Duplication Rate', 'Status'])
+        
+        # Write the details for each file
+        for r in results:
+            if "error" in r:
+                csv_writer.writerow([r['file_path'], '-', '-', '-', '-', f'ERROR: {r["error"]}'])
+            else:
+                duplication_rate = f"{(r['duplicates_removed'] / r['total_lines'] * 100):.2f}%" if r['total_lines'] > 0 else "0.00%"
+                status = 'Dry run' if r.get('dry_run', False) else 'Success'
+                csv_writer.writerow([
+                    r['file_path'],
+                    r['total_lines'],
+                    r['unique_lines'],
+                    r['duplicates_removed'],
+                    duplication_rate,
+                    status
+                ])
+        
+        output = csv_output.getvalue()
+    
     else:  # text format
         lines = [
             "=== DupeRemover Results ===",
@@ -715,7 +758,7 @@ def generate_report(results: List[Dict], output_format: str = "text",
             f"Total lines processed: {total_lines}",
             f"Total unique lines: {total_unique}",
             f"Total duplicates removed: {total_removed}",
-            f"Overall duplication rate: {(total_removed / total_lines * 100):.2f}% (if applicable)",
+            f"Overall duplication rate: {(total_removed / total_lines * 100):.2f}% (if applicable)" if total_lines > 0 else "Overall duplication rate: 0.00% (if applicable)",
             "",
             "DETAILS:"
         ]
@@ -729,7 +772,8 @@ def generate_report(results: List[Dict], output_format: str = "text",
                 lines.append(f"  - Total lines: {r['total_lines']}")
                 lines.append(f"  - Unique lines: {r['unique_lines']}")
                 lines.append(f"  - Duplicates removed: {r['duplicates_removed']}")
-                lines.append(f"  - Duplication rate: {(r['duplicates_removed'] / r['total_lines'] * 100):.2f}%")
+                duplication_rate = (r['duplicates_removed'] / r['total_lines'] * 100) if r['total_lines'] > 0 else 0
+                lines.append(f"  - Duplication rate: {duplication_rate:.2f}%")
         
         output = "\n".join(lines)
     
@@ -799,7 +843,7 @@ def parse_arguments():
     )
     output_group.add_argument(
         "--report",
-        choices=["text", "json", "html"],
+        choices=["text", "json", "html", "csv"],
         default="text",
         help="Format for the results report (default: text)"
     )
