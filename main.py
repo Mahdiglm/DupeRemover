@@ -623,7 +623,7 @@ def generate_report(results: List[Dict], output_format: str = "text",
     
     Args:
         results: List of result dictionaries
-        output_format: Format for the report ('text', 'json', 'html', 'csv', or 'xml')
+        output_format: Format for the report ('text', 'json', 'html', 'csv', 'xml', or 'yaml')
         report_file: Optional path to write the report to
         
     Returns:
@@ -645,7 +645,28 @@ def generate_report(results: List[Dict], output_format: str = "text",
     total_unique = sum(r.get('unique_lines', 0) for r in successful)
     total_removed = sum(r.get('duplicates_removed', 0) for r in successful)
     
-    if output_format == "json":
+    if output_format == "yaml":
+        try:
+            import yaml
+            report = {
+                "timestamp": datetime.now().isoformat(),
+                "summary": {
+                    "files_processed": total_processed,
+                    "files_failed": total_failed,
+                    "total_lines": total_lines,
+                    "unique_lines": total_unique,
+                    "duplicates_removed": total_removed,
+                    "duplication_rate": (total_removed / total_lines) if total_lines > 0 else 0
+                },
+                "results": results
+            }
+            output = yaml.dump(report, sort_keys=False, default_flow_style=False)
+        except ImportError:
+            logging.warning("PyYAML library not installed. Falling back to text format.")
+            # Recursively call with text format
+            return generate_report(results, "text", report_file)
+    
+    elif output_format == "json":
         report = {
             "timestamp": datetime.now().isoformat(),
             "summary": {
@@ -886,7 +907,7 @@ def parse_arguments():
     )
     output_group.add_argument(
         "--report",
-        choices=["text", "json", "html", "csv", "xml"],
+        choices=["text", "json", "html", "csv", "xml", "yaml"],
         default="text",
         help="Format for the results report (default: text)"
     )
