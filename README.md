@@ -24,15 +24,15 @@
 
 <hr>
 
-## 🌟 Key Features
+## Key Features
 
-### ⚡ High Performance
+### High Performance
 
 - **Parallel processing** for multi-file operations
 - **Chunked reading** for efficient handling of GB-size files
 - **Optimized algorithms** for speed and memory efficiency
 
-### 🧠 Intelligent Processing
+### Intelligent Processing
 
 - **Six comparison modes** for versatile deduplication:
   - Case-sensitive/insensitive matching
@@ -42,19 +42,19 @@
   - Fuzzy matching with adjustable similarity
 - **Smart encoding detection** for various file formats
 
-### 📊 Comprehensive Reporting
+### Comprehensive Reporting
 
 - **Multiple output formats** (Text, JSON, HTML)
 - **Detailed statistics** on duplication rates
 - **Visual progress tracking** during processing
 
-### 🛡️ Safety Features
+### Safety Features
 
 - **Backup creation** before modifications
 - **Dry-run mode** for previewing changes
 - **Comprehensive error handling** and logging
 
-## 📥 Installation
+## Installation
 
 ### Prerequisites
 
@@ -74,7 +74,7 @@ cd DupeRemover
 pip install tqdm
 ```
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Process a single file
 
@@ -94,7 +94,7 @@ python main.py file1.txt file2.txt file3.txt
 python main.py -d your_directory/
 ```
 
-## 📖 Usage Guide
+## Usage Guide
 
 ### Input Options
 
@@ -154,7 +154,7 @@ python main.py your_file.txt --dry-run
 python main.py your_file.txt --verbose --log-file process.log
 ```
 
-## 📊 Example Output
+## Example Output
 
 ```
 === DupeRemover Results ===
@@ -188,7 +188,7 @@ file3.txt:
 Processing completed in 3.24 seconds
 ```
 
-## 💼 Use Cases
+## Use Cases
 
 - **Log file analysis** - Clean up and deduplicate log files for better analysis
 - **Data cleaning** - Preprocess datasets by removing duplicate entries
@@ -196,7 +196,7 @@ Processing completed in 3.24 seconds
 - **Code management** - Identify and remove duplicate strings or content
 - **Document processing** - Clean up exported text data from PDFs or documents
 
-## 📚 Documentation
+## Documentation
 
 For complete details on all available options:
 
@@ -204,7 +204,7 @@ For complete details on all available options:
 python main.py --help
 ```
 
-## 🛣️ Project Status
+## Project Status
 
 DupeRemover 2.0.1 is in **maintenance mode**. This means:
 
@@ -212,7 +212,7 @@ DupeRemover 2.0.1 is in **maintenance mode**. This means:
 - Bug fixes and minor improvements are still accepted
 - No major new features are planned, but community contributions are welcome
 
-## 👥 Contributing
+## Contributing
 
 We welcome contributions that improve stability, performance, or documentation. To contribute:
 
@@ -229,7 +229,7 @@ Types of welcome contributions:
 - Platform compatibility improvements
 - Documentation enhancements
 
-## 📜 License
+## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
