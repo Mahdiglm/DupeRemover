@@ -1,13 +1,13 @@
 <div align="center">
 
-# Feature Update v2.0.2
+# Usability Update v2.0.3
 
-  <img src="https://img.shields.io/badge/reports-expanded-brightgreen" alt="Reports expanded"/>
-  <img src="https://img.shields.io/badge/encodings-enhanced-blue" alt="Encodings enhanced"/>
-  <img src="https://img.shields.io/badge/errors-improved-orange" alt="Error handling improved"/>
+  <img src="https://img.shields.io/badge/output-enhanced-brightgreen" alt="Output enhanced"/>
+  <img src="https://img.shields.io/badge/progress-improved-blue" alt="Progress improved"/>
+  <img src="https://img.shields.io/badge/options-expanded-orange" alt="Options expanded"/>
 
 <div style="border-left: 4px solid #5cb85c; padding-left: 15px; margin: 20px 0; color: #333;">
-  This feature update expands reporting capabilities with multiple new formats and improves international file support.
+  This update focuses on improving the user experience with better output options and additional usability features.
 </div>
 
 ## New Features
@@ -15,22 +15,19 @@
 <table>
   <tr>
     <td width="40" align="center"><strong>✓</strong></td>
-    <td>Added new report format options:
-      <ul>
-        <li>CSV format for spreadsheet compatibility</li>
-        <li>XML format for structured data processing</li>
-        <li>YAML format for configuration-style output</li>
-        <li>Markdown format for documentation-friendly reports</li>
-      </ul>
-    </td>
+    <td>Command-line option for colored output in text reports (<code>--color</code>)</td>
   </tr>
   <tr>
     <td width="40" align="center"><strong>✓</strong></td>
-    <td>Expanded encoding detection with support for additional international character sets</td>
+    <td>Progress spinner for small file operations for better visual feedback</td>
   </tr>
   <tr>
     <td width="40" align="center"><strong>✓</strong></td>
-    <td>Improved error handling with more specific error messages</td>
+    <td>Quiet mode to suppress all non-error output (<code>-q/--quiet</code>)</td>
+  </tr>
+  <tr>
+    <td width="40" align="center"><strong>✓</strong></td>
+    <td>Option to customize backup file extension (<code>--backup-ext</code>)</td>
   </tr>
 </table>
 </div>
