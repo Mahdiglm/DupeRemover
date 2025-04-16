@@ -628,7 +628,7 @@ def process_multiple_files(file_paths: List[str], comparison_mode: str,
 
 
 def generate_report(results: List[Dict], output_format: str = "text", 
-                   report_file: Optional[str] = None) -> str:
+                   report_file: Optional[str] = None, use_color: bool = False) -> str:
     """
     Generate a report of the results.
     
@@ -636,6 +636,7 @@ def generate_report(results: List[Dict], output_format: str = "text",
         results: List of result dictionaries
         output_format: Format for the report ('text', 'json', 'html', 'csv', 'xml', 'yaml', or 'markdown')
         report_file: Optional path to write the report to
+        use_color: Whether to use colors in text output (only applies to text format)
         
     Returns:
         The report as a string
@@ -705,7 +706,7 @@ def generate_report(results: List[Dict], output_format: str = "text",
         except ImportError:
             logging.warning("PyYAML library not installed. Falling back to text format.")
             # Recursively call with text format
-            return generate_report(results, "text", report_file)
+            return generate_report(results, "text", report_file, use_color)
     
     elif output_format == "json":
         report = {
@@ -853,32 +854,44 @@ def generate_report(results: List[Dict], output_format: str = "text",
         output = reparsed.toprettyxml(indent="  ")
     
     else:  # text format
+        # Define ANSI color codes if color is enabled
+        if use_color:
+            HEADER = '\033[95m'
+            BLUE = '\033[94m'
+            GREEN = '\033[92m'
+            YELLOW = '\033[93m'
+            RED = '\033[91m'
+            ENDC = '\033[0m'
+            BOLD = '\033[1m'
+        else:
+            HEADER = BLUE = GREEN = YELLOW = RED = ENDC = BOLD = ''
+            
         lines = [
-            "=== DupeRemover Results ===",
+            f"{HEADER}=== DupeRemover Results ==={ENDC}",
             f"Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
             "",
-            "SUMMARY:",
-            f"Files processed: {total_processed}/{len(results)}",
-            f"Files failed: {total_failed}",
-            f"Total lines processed: {total_lines}",
-            f"Total unique lines: {total_unique}",
-            f"Total duplicates removed: {total_removed}",
-            f"Overall duplication rate: {(total_removed / total_lines * 100):.2f}% (if applicable)" if total_lines > 0 else "Overall duplication rate: 0.00% (if applicable)",
+            f"{BOLD}SUMMARY:{ENDC}",
+            f"Files processed: {GREEN}{total_processed}/{len(results)}{ENDC}",
+            f"Files failed: {RED if total_failed > 0 else GREEN}{total_failed}{ENDC}",
+            f"Total lines processed: {BLUE}{total_lines}{ENDC}",
+            f"Total unique lines: {BLUE}{total_unique}{ENDC}",
+            f"Total duplicates removed: {YELLOW}{total_removed}{ENDC}",
+            f"Overall duplication rate: {YELLOW}{(total_removed / total_lines * 100):.2f}%{ENDC} (if applicable)" if total_lines > 0 else f"Overall duplication rate: {YELLOW}0.00%{ENDC} (if applicable)",
             "",
-            "DETAILS:"
+            f"{BOLD}DETAILS:{ENDC}"
         ]
         
         for r in results:
             if "error" in r:
-                lines.append(f"[ERROR] {r['file_path']}: {r['error']}")
+                lines.append(f"{RED}[ERROR] {r['file_path']}: {r['error']}{ENDC}")
             else:
-                dry_run_prefix = "[DRY RUN] " if r.get('dry_run', False) else ""
-                lines.append(f"{dry_run_prefix}{r['file_path']}:")
+                dry_run_prefix = f"{BLUE}[DRY RUN]{ENDC} " if r.get('dry_run', False) else ""
+                lines.append(f"{dry_run_prefix}{BOLD}{r['file_path']}:{ENDC}")
                 lines.append(f"  - Total lines: {r['total_lines']}")
                 lines.append(f"  - Unique lines: {r['unique_lines']}")
-                lines.append(f"  - Duplicates removed: {r['duplicates_removed']}")
+                lines.append(f"  - Duplicates removed: {YELLOW}{r['duplicates_removed']}{ENDC}")
                 duplication_rate = (r['duplicates_removed'] / r['total_lines'] * 100) if r['total_lines'] > 0 else 0
-                lines.append(f"  - Duplication rate: {duplication_rate:.2f}%")
+                lines.append(f"  - Duplication rate: {YELLOW}{duplication_rate:.2f}%{ENDC}")
         
         output = "\n".join(lines)
     
@@ -1062,7 +1075,7 @@ def main() -> None:
     elapsed = end_time.user - start_time.user + end_time.system - start_time.system
     
     # Generate and display report
-    report = generate_report(results, args.report, args.report_file)
+    report = generate_report(results, args.report, args.report_file, args.color)
     if not args.report_file:
         print("\n" + report)
     
