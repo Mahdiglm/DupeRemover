@@ -1,0 +1,8 @@
+tqdm>=4.63.0
+chardet>=5.0.0
+langdetect>=1.0.9
+# Optional language-specific libraries
+# hanziconv>=0.3.2  # For Chinese (Traditional/Simplified) conversion
+# mojimoji>=0.0.11  # For Japanese character conversion
+# hangul-utils>=0.4.0  # For Korean text normalization
+# pyarabic>=0.6.15  # For Arabic text normalization 

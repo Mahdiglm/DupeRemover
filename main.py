@@ -80,7 +80,7 @@ def chunk_reader(file_path: str, chunk_size: int = 1024*1024) -> Generator[List[
 
 def detect_encoding(file_path: str) -> str:
     """
-    Attempt to detect the encoding of a file.
+    Attempt to detect the encoding of a file with enhanced language support.
     
     Args:
         file_path: Path to the file
@@ -88,36 +88,124 @@ def detect_encoding(file_path: str) -> str:
     Returns:
         Detected encoding or 'utf-8' as fallback
     """
-    # Expanded list of encodings to try, in order of preference
-    encodings = [
-        'utf-8', 'latin-1', 'utf-16', 'utf-16-le', 'utf-16-be', 
-        'ascii', 'cp1252', 'iso-8859-1', 'iso-8859-2', 'iso-8859-15',
-        'windows-1250', 'windows-1251', 'windows-1252', 'windows-1253',
-        'windows-1254', 'windows-1255', 'windows-1256', 'windows-1257',
-        'big5', 'gb2312', 'euc-jp', 'shift-jis', 'euc-kr', 'utf-32',
-        'utf-32-le', 'utf-32-be'
-    ]
+    # Dictionary of common encodings by language/region
+    language_encodings = {
+        # Western languages
+        'western': ['utf-8', 'latin-1', 'cp1252', 'iso-8859-1', 'iso-8859-15'],
+        # Eastern European
+        'eastern_european': ['iso-8859-2', 'cp1250', 'windows-1250', 'iso-8859-3'],
+        # Cyrillic (Russian, Bulgarian, etc.)
+        'cyrillic': ['cp1251', 'windows-1251', 'iso-8859-5', 'koi8-r', 'koi8-u'],
+        # Greek
+        'greek': ['iso-8859-7', 'cp1253', 'windows-1253'],
+        # Turkish
+        'turkish': ['iso-8859-9', 'cp1254', 'windows-1254'],
+        # Hebrew
+        'hebrew': ['iso-8859-8', 'cp1255', 'windows-1255'],
+        # Arabic
+        'arabic': ['iso-8859-6', 'cp1256', 'windows-1256'],
+        # Baltic
+        'baltic': ['iso-8859-4', 'cp1257', 'windows-1257'],
+        # East Asian (Chinese, Japanese, Korean)
+        'east_asian': ['gb2312', 'gbk', 'gb18030', 'big5', 'shift-jis', 'euc-jp', 'iso-2022-jp', 'euc-kr'],
+        # Unicode
+        'unicode': ['utf-8', 'utf-16', 'utf-16-le', 'utf-16-be', 'utf-32', 'utf-32-le', 'utf-32-be']
+    }
     
-    # First, try to use chardet if available for more accurate detection
+    # Flatten the dictionary to a prioritized list
+    # Start with unicode, then western, then add all others
+    encodings = language_encodings['unicode'] + language_encodings['western']
+    for lang, encs in language_encodings.items():
+        if lang not in ['unicode', 'western']:
+            encodings.extend(encs)
+    
+    # Remove duplicates while preserving order
+    unique_encodings = []
+    for enc in encodings:
+        if enc not in unique_encodings:
+            unique_encodings.append(enc)
+    
+    # Try to use chardet for more accurate detection
     try:
         import chardet
         with open(file_path, 'rb') as file:
-            sample = file.read(4096)  # Read larger sample for better detection
+            # Read larger sample for better detection (up to 1MB)
+            sample = file.read(1024 * 1024)
             if sample:
                 result = chardet.detect(sample)
-                if result['confidence'] > 0.7:  # Only accept high confidence detections
+                confidence_threshold = 0.7
+                if result['confidence'] > confidence_threshold:
                     logging.info(f"Detected encoding with chardet: {result['encoding']} ({result['confidence']:.2f} confidence)")
                     return result['encoding']
+                logging.debug(f"Chardet detection too low confidence: {result}")
     except ImportError:
         logging.debug("chardet module not available, falling back to manual detection")
     except Exception as e:
         logging.debug(f"Error using chardet: {str(e)}")
     
-    # Fallback to manual detection
-    for encoding in encodings:
+    # Enhanced byte signature detection
+    try:
+        with open(file_path, 'rb') as file:
+            raw = file.read(4)
+            # BOM detection
+            if raw.startswith(b'\xef\xbb\xbf'):
+                return 'utf-8-sig'
+            elif raw.startswith(b'\xfe\xff'):
+                return 'utf-16-be'
+            elif raw.startswith(b'\xff\xfe'):
+                return 'utf-16-le'
+            elif raw.startswith(b'\x00\x00\xfe\xff'):
+                return 'utf-32-be'
+            elif raw.startswith(b'\xff\xfe\x00\x00'):
+                return 'utf-32-le'
+    except Exception as e:
+        logging.debug(f"Error in BOM detection: {str(e)}")
+    
+    # Sample-based heuristic detection
+    try:
+        with open(file_path, 'rb') as file:
+            sample = file.read(4096)
+            
+            # Try to detect UTF-8 by checking for valid UTF-8 sequences
+            try:
+                sample.decode('utf-8')
+                # If it decodes as UTF-8 without errors, it's very likely UTF-8
+                return 'utf-8'
+            except UnicodeDecodeError:
+                pass
+            
+            # Check for high frequency of NULL bytes which suggests UTF-16/UTF-32
+            null_count = sample.count(b'\x00')
+            if null_count > len(sample) * 0.3:
+                # Try different UTF-16/UTF-32 variants
+                for enc in ['utf-16', 'utf-16-le', 'utf-16-be', 'utf-32', 'utf-32-le', 'utf-32-be']:
+                    try:
+                        sample.decode(enc)
+                        return enc
+                    except UnicodeDecodeError:
+                        continue
+            
+            # Check for specific language markers
+            # East Asian detection (high bytes common)
+            high_byte_count = sum(1 for b in sample if b > 127)
+            if high_byte_count > len(sample) * 0.3:
+                # Try East Asian encodings first
+                for enc in language_encodings['east_asian']:
+                    try:
+                        with open(file_path, 'r', encoding=enc, errors='strict') as f:
+                            f.read(100)
+                        return enc
+                    except UnicodeDecodeError:
+                        continue
+    except Exception as e:
+        logging.debug(f"Error in heuristic detection: {str(e)}")
+    
+    # Fallback to trying encodings one by one
+    for encoding in unique_encodings:
         try:
-            with open(file_path, 'r', encoding=encoding, errors='ignore') as file:
-                file.read(1024)  # Read a small sample
+            with open(file_path, 'r', encoding=encoding, errors='strict') as file:
+                file.read(1024)  # Read a small sample with strict error checking
+                logging.info(f"Successfully detected encoding: {encoding}")
                 return encoding
         except UnicodeDecodeError:
             continue
@@ -179,7 +267,8 @@ def remove_duplicates(file_path: str, comparison_mode: str = "case-insensitive",
                       output_file: Optional[str] = None, chunk_size: int = 1024*1024,
                       dry_run: bool = False, similarity_threshold: float = 0.8,
                       backup_extension: str = ".bak", preserve_permissions: bool = False,
-                      exclude_pattern: Optional[str] = None) -> Dict:
+                      exclude_pattern: Optional[str] = None, language: Optional[str] = None,
+                      auto_detect_language: bool = False, detect_per_line: bool = False) -> Dict:
     """
     Remove duplicate lines from a text file based on specified comparison mode.
     
@@ -195,6 +284,9 @@ def remove_duplicates(file_path: str, comparison_mode: str = "case-insensitive",
         backup_extension: Extension for backup files
         preserve_permissions: Whether to preserve file permissions when writing output files
         exclude_pattern: Regex pattern for lines to exclude from processing
+        language: Specific language code for normalization
+        auto_detect_language: Whether to automatically detect the document language
+        detect_per_line: Whether to detect language per line (for mixed content)
     
     Returns:
         Dictionary containing statistics about the operation
@@ -305,7 +397,11 @@ def remove_duplicates(file_path: str, comparison_mode: str = "case-insensitive",
                     pbar.update(len('\n'.join(chunk).encode(encoding, errors='ignore')))
                 
                 # Process this chunk of lines
-                chunk_lines, chunk_seen = process_lines(chunk, comparison_mode, show_progress, similarity_threshold, exclude_pattern)
+                chunk_lines, chunk_seen = process_lines(
+                    chunk, comparison_mode, show_progress, similarity_threshold, 
+                    exclude_pattern, language, 
+                    auto_detect_language or detect_per_line
+                )
                 
                 total_lines += len(chunk)
                 unique_lines.extend(chunk_lines)
@@ -381,17 +477,114 @@ def remove_duplicates(file_path: str, comparison_mode: str = "case-insensitive",
         raise
 
 
-def normalize_line(line: str, comparison_mode: str) -> str:
+def normalize_line(line: str, comparison_mode: str, language: str = None) -> str:
     """
-    Normalize a line based on the comparison mode.
+    Normalize a line based on the comparison mode and language.
     
     Args:
         line: The line to normalize
         comparison_mode: The comparison mode to use
+        language: Language-specific normalization (auto-detect if None)
         
     Returns:
         Normalized line string
     """
+    # First try to detect the language if not specified
+    if language is None:
+        try:
+            # Try to use langdetect for automatic language detection
+            import langdetect
+            # Only attempt detection on lines with enough content
+            if len(line.strip()) > 20:
+                try:
+                    detected = langdetect.detect(line)
+                    language = detected
+                    logging.debug(f"Detected language: {language}")
+                except langdetect.lang_detect_exception.LangDetectException:
+                    # If detection fails, default to None
+                    logging.debug("Language detection failed, using generic normalization")
+            else:
+                logging.debug("Line too short for language detection")
+        except ImportError:
+            logging.debug("langdetect module not available, using generic normalization")
+    
+    # Apply language-specific normalization
+    if language:
+        # Unicode normalization (handles combining characters)
+        import unicodedata
+        line = unicodedata.normalize('NFKC', line)
+        
+        # Language-specific handling
+        if language in ['zh', 'zh-cn', 'zh-tw']:  # Chinese
+            try:
+                # Try to handle traditional vs simplified Chinese
+                # This requires the 'hanziconv' library
+                from hanziconv import HanziConv
+                if comparison_mode == "case-insensitive":
+                    # Convert to simplified for comparison
+                    return HanziConv.toSimplified(line.strip())
+                else:
+                    return line.strip()
+            except ImportError:
+                logging.debug("hanziconv not available for Chinese normalization")
+                return line.strip()
+        
+        elif language in ['ja']:  # Japanese
+            # For Japanese, handle full-width/half-width characters
+            try:
+                import mojimoji
+                # Convert all full-width chars to half-width where possible
+                normalized = mojimoji.zen_to_han(line, kana=False)
+                if comparison_mode == "case-insensitive":
+                    return normalized.strip().lower()
+                else:
+                    return normalized.strip()
+            except ImportError:
+                logging.debug("mojimoji not available for Japanese normalization")
+                if comparison_mode == "case-insensitive":
+                    return line.strip().lower()
+                else:
+                    return line.strip()
+        
+        elif language in ['ko']:  # Korean
+            # For Korean, handle Hangul normalization
+            try:
+                from hangul_utils import normalize_hangul
+                normalized = normalize_hangul(line)
+                if comparison_mode == "case-insensitive":
+                    return normalized.strip().lower()
+                else:
+                    return normalized.strip()
+            except ImportError:
+                logging.debug("hangul_utils not available for Korean normalization")
+                if comparison_mode == "case-insensitive":
+                    return line.strip().lower()
+                else:
+                    return line.strip()
+        
+        elif language in ['ar', 'fa', 'ur']:  # Arabic, Persian, Urdu
+            # Handle Arabic/Persian normalization (remove diacritics, normalize letter forms)
+            try:
+                # Try to use pyarabic for Arabic text normalization
+                from pyarabic.araby import normalize_hamza, normalize_teh, normalize_alef
+                from pyarabic.araby import strip_tashkeel, strip_tatweel
+                
+                normalized = line
+                normalized = strip_tashkeel(normalized)  # Remove diacritics
+                normalized = strip_tatweel(normalized)   # Remove tatweel (stretching character)
+                normalized = normalize_hamza(normalized) # Normalize hamza forms
+                normalized = normalize_alef(normalized)  # Normalize alef forms
+                normalized = normalize_teh(normalized)   # Normalize teh forms
+                
+                return normalized.strip()
+            except ImportError:
+                logging.debug("pyarabic not available for Arabic text normalization")
+                if comparison_mode == "case-insensitive":
+                    return line.strip().lower()
+                else:
+                    return line.strip()
+    
+    # Fall back to standard normalization if no language-specific handling
     if comparison_mode == "case-insensitive":
         return line.strip().lower()
     elif comparison_mode == "case-sensitive":
@@ -508,7 +701,8 @@ def is_fuzzy_duplicate(normalized: str, seen_lines: Set[str], threshold: float) 
 
 
 def process_lines(lines: List[str], comparison_mode: str, show_progress: bool, 
-                  similarity_threshold: float = 1.0, exclude_pattern: Optional[str] = None) -> Tuple[List[str], Set[str]]:
+                  similarity_threshold: float = 1.0, exclude_pattern: Optional[str] = None,
+                  language: Optional[str] = None, auto_detect_language: bool = False) -> Tuple[List[str], Set[str]]:
     """
     Process the lines from the file to remove duplicates while preserving order.
     
@@ -518,6 +712,8 @@ def process_lines(lines: List[str], comparison_mode: str, show_progress: bool,
         show_progress: Whether to show a progress bar
         similarity_threshold: Threshold for fuzzy matching (0-1)
         exclude_pattern: Regex pattern for lines to exclude from processing
+        language: Specific language code for normalization (None for auto)
+        auto_detect_language: Whether to attempt language detection for each line
     
     Returns:
         A tuple containing (list of unique lines, set of normalized lines seen)
@@ -552,6 +748,33 @@ def process_lines(lines: List[str], comparison_mode: str, show_progress: bool,
     else:
         line_iterator = lines
     
+    # Try to detect the dominant language in the file if auto_detect_language is True
+    dominant_language = None
+    if auto_detect_language and language is None:
+        try:
+            import langdetect
+            # Sample up to 50 lines for language detection
+            sample_text = " ".join([line for line in lines[:50] if len(line.strip()) > 5])
+            if len(sample_text) > 100:  # Only detect if we have enough text
+                try:
+                    # Try to get language with probability distribution
+                    langs = langdetect.detect_langs(sample_text)
+                    if langs and langs[0].prob > 0.5:  # Use the most probable language if confidence is high
+                        dominant_language = langs[0].lang
+                        logging.info(f"Detected dominant language: {dominant_language} (confidence: {langs[0].prob:.2f})")
+                except:
+                    # Fall back to simpler detection
+                    try:
+                        dominant_language = langdetect.detect(sample_text)
+                        logging.info(f"Detected dominant language: {dominant_language}")
+                    except:
+                        logging.debug("Failed to detect dominant language")
+        except ImportError:
+            logging.debug("langdetect module not available for language detection")
+    
+    # Use the specified language if provided, otherwise use the detected dominant language
+    working_language = language if language is not None else dominant_language
+    
     # Process each line
     for line in line_iterator:
         # Add newline if it's missing (for chunks)
@@ -570,9 +793,26 @@ def process_lines(lines: List[str], comparison_mode: str, show_progress: bool,
             logging.debug(f"Skipping excluded line: {line.strip()}")
             unique_lines.append(line)  # Keep the line but don't check for duplicates
             continue
+        
+        # Detect language for this specific line if auto_detect_language is True
+        line_language = None
+        if auto_detect_language and working_language is None and len(line.strip()) > 20:
+            try:
+                import langdetect
+                try:
+                    line_language = langdetect.detect(line)
+                    logging.debug(f"Line language detected: {line_language}")
+                except langdetect.lang_detect_exception.LangDetectException:
+                    pass
+            except ImportError:
+                pass
             
-        # Normalize the line for comparison based on comparison mode
-        normalized = normalize_line(line, "case-insensitive" if using_fuzzy else comparison_mode)
+        # Use line-specific language if detected, otherwise use the working language
+        current_language = line_language if line_language else working_language
+            
+        # Normalize the line for comparison based on comparison mode and language
+        normalized = normalize_line(line, "case-insensitive" if using_fuzzy else comparison_mode, 
+                                   language=current_language)
         
         # Skip if empty after normalization
         if normalized == "":
@@ -634,7 +874,10 @@ def process_multiple_files(file_paths: List[str], comparison_mode: str,
                          similarity_threshold: float = 0.8,
                          backup_extension: str = ".bak",
                          preserve_permissions: bool = False,
-                         exclude_pattern: Optional[str] = None) -> List[Dict]:
+                         exclude_pattern: Optional[str] = None,
+                         language: Optional[str] = None,
+                         auto_detect_language: bool = False,
+                         detect_per_line: bool = False) -> List[Dict]:
     """
     Process multiple files and remove duplicates from each.
     
@@ -652,6 +895,9 @@ def process_multiple_files(file_paths: List[str], comparison_mode: str,
         backup_extension: Extension for backup files
         preserve_permissions: Whether to preserve file permissions when writing output files
         exclude_pattern: Regex pattern for lines to exclude from processing
+        language: Specific language code for normalization
+        auto_detect_language: Whether to automatically detect the document language
+        detect_per_line: Whether to detect language per line (for mixed content)
         
     Returns:
         List of statistics dictionaries for each file
@@ -668,25 +914,63 @@ def process_multiple_files(file_paths: List[str], comparison_mode: str,
         os.makedirs(output_dir, exist_ok=True)
         output_files = {path: os.path.join(output_dir, os.path.basename(path)) for path in file_paths}
     
-    for file_path in file_paths:
+    # Define a function for file processing (used in both parallel and sequential modes)
+    def process_file(file_path):
         try:
-            result = remove_duplicates(
-                file_path, comparison_mode, create_backup, show_progress,
-                output_files[file_path] if output_files else None, 1024*1024, dry_run, similarity_threshold, 
-                backup_extension, preserve_permissions, exclude_pattern
-            )
-            
-            results.append(result)
-            
-            # Log the results for this file
-            logging.info(f"Results for {file_path}:")
-            logging.info(f"  Original line count: {result['total_lines']}")
-            logging.info(f"  Unique lines: {result['unique_lines']}")
-            logging.info(f"  Duplicates removed: {result['duplicates_removed']}")
-            
+            output_file = output_files[file_path] if output_files else None
+            return remove_duplicates(file_path, comparison_mode, create_backup, 
+                                    show_progress, output_file, chunk_size,
+                                    dry_run, similarity_threshold, backup_extension,
+                                    preserve_permissions, exclude_pattern,
+                                    language, auto_detect_language, detect_per_line)
         except Exception as e:
             logging.error(f"Failed to process {file_path}: {str(e)}")
-            results.append({"file_path": file_path, "error": str(e)})
+            return {"file_path": file_path, "error": str(e)}
+    
+    if parallel and len(file_paths) > 1:
+        logging.info(f"Processing {len(file_paths)} files in parallel")
+        
+        # Process files in parallel
+        with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
+            futures = {executor.submit(process_file, path): path for path in file_paths}
+            
+            if show_progress:
+                futures_iterator = tqdm(concurrent.futures.as_completed(futures), 
+                                       total=len(file_paths), desc="Files", unit="file")
+            else:
+                futures_iterator = concurrent.futures.as_completed(futures)
+            
+            for future in futures_iterator:
+                file_path = futures[future]
+                try:
+                    stats = future.result()
+                    results.append(stats)
+                    
+                    if "error" not in stats:
+                        logging.info(f"Results for {file_path}:")
+                        logging.info(f"  Original line count: {stats['total_lines']}")
+                        logging.info(f"  Unique lines: {stats['unique_lines']}")
+                        logging.info(f"  Duplicates removed: {stats['duplicates_removed']}")
+                except Exception as e:
+                    logging.error(f"Exception processing {file_path}: {str(e)}")
+                    results.append({"file_path": file_path, "error": str(e)})
+    else:
+        # Process files sequentially
+        for file_path in file_paths:
+            try:
+                stats = process_file(file_path)
+                results.append(stats)
+                
+                # Log the results for this file
+                if "error" not in stats:
+                    logging.info(f"Results for {file_path}:")
+                    logging.info(f"  Original line count: {stats['total_lines']}")
+                    logging.info(f"  Unique lines: {stats['unique_lines']}")
+                    logging.info(f"  Duplicates removed: {stats['duplicates_removed']}")
+                
+            except Exception as e:
+                logging.error(f"Failed to process {file_path}: {str(e)}")
+                results.append({"file_path": file_path, "error": str(e)})
     
     return results
 
@@ -1021,6 +1305,23 @@ def parse_arguments():
         help="Regex pattern for lines to exclude from processing"
     )
     
+    # Language options
+    language_group = parser.add_argument_group('Language Options')
+    language_group.add_argument(
+        "--language",
+        help="Specify language code for better text normalization (e.g., en, zh, ja, ko, ar)"
+    )
+    language_group.add_argument(
+        "--auto-detect-language",
+        action="store_true",
+        help="Automatically detect language for normalization"
+    )
+    language_group.add_argument(
+        "--detect-per-line",
+        action="store_true",
+        help="Detect language for each line individually (slower but more accurate for mixed language files)"
+    )
+    
     # Output options
     output_group = parser.add_argument_group('Output Options')
     output_group.add_argument(
@@ -1133,6 +1434,23 @@ def main() -> None:
         print("Run 'python main.py --help' for usage information")
         sys.exit(1)
     
+    # Validate language options
+    if args.detect_per_line and not args.auto_detect_language:
+        logging.warning("--detect-per-line requires --auto-detect-language. Enabling auto detection.")
+        args.auto_detect_language = True
+    
+    # Check for required language modules and warn if not available
+    if args.auto_detect_language or args.language:
+        try:
+            import langdetect
+            logging.info("Language detection enabled using langdetect module")
+        except ImportError:
+            logging.warning("langdetect module not found. Install with 'pip install langdetect' for language detection")
+            if args.auto_detect_language:
+                logging.warning("Auto language detection disabled due to missing dependency")
+                args.auto_detect_language = False
+                args.detect_per_line = False
+    
     # Collect all files to process
     file_paths = []
     
@@ -1164,7 +1482,10 @@ def main() -> None:
         args.similarity if args.mode == "fuzzy" else 1.0,
         args.backup_ext,
         args.preserve_permissions,
-        args.exclude_pattern
+        args.exclude_pattern,
+        args.language,
+        args.auto_detect_language,
+        args.detect_per_line
     )
     
     end_time = os.times()
