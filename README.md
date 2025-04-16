@@ -100,19 +100,22 @@ DupeRemover helps you eliminate duplicate content from text files while providin
 
 <table>
   <tr>
-    <th align="center" width="33%">Fuzzy Matching</th>
-    <th align="center" width="33%">Parallel Processing</th>
-    <th align="center" width="33%">Memory-Efficient Processing</th>
+    <th align="center" width="25%">Fuzzy Matching</th>
+    <th align="center" width="25%">Parallel Processing</th>
+    <th align="center" width="25%">Memory-Efficient Processing</th>
+    <th align="center" width="25%">Real-time Streaming</th>
   </tr>
   <tr>
     <td>Identifies near-duplicate content using advanced similarity algorithms</td>
     <td>Processes multiple files simultaneously for maximum throughput</td>
     <td>Handles files of any size with constant memory usage</td>
+    <td>Processes files in real-time as they are being written</td>
   </tr>
   <tr>
     <td align="center"><code>--mode fuzzy --similarity 0.8</code></td>
     <td align="center"><code>--parallel --workers 4</code></td>
     <td align="center"><code>--chunk-size 2097152</code></td>
+    <td align="center"><code>--stream --follow</code></td>
   </tr>
 </table>
 
@@ -239,6 +242,34 @@ python main.py *.txt --parallel --workers 4
 # Processing large files with custom chunk size (2MB)
 python main.py large_file.txt --chunk-size 2097152
 ```
+
+### Real-time Log Processing
+
+DupeRemover can process log files in real-time as they're being written, removing duplicate entries on-the-fly:
+
+```bash
+# Basic streaming mode
+python main.py server.log --stream --follow
+
+# Stream with a 1-second polling interval
+python main.py app.log --stream --follow --poll-interval 1.0
+
+# Stream for a maximum of 3600 seconds (1 hour)
+python main.py system.log --stream --follow --max-runtime 3600
+
+# Customize the buffer size for recent lines
+python main.py access.log --stream --follow --buffer-size 5000
+```
+
+#### Streaming Mode Options
+
+| Option            | Description                                      | Default |
+| :---------------- | :----------------------------------------------- | :------ |
+| `--stream`        | Enable streaming mode                            | Off     |
+| `--follow`        | Continue watching file for changes               | Off     |
+| `--poll-interval` | Seconds between file checks in follow mode       | 0.5     |
+| `--buffer-size`   | Maximum number of recent lines to keep in buffer | 10000   |
+| `--max-runtime`   | Maximum runtime in seconds                       | None    |
 
 ### Output Options
 
