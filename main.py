@@ -506,7 +506,7 @@ def is_fuzzy_duplicate(normalized: str, seen_lines: Set[str], threshold: float) 
 
 
 def process_lines(lines: List[str], comparison_mode: str, show_progress: bool, 
-                  similarity_threshold: float = 1.0) -> Tuple[List[str], Set[str]]:
+                  similarity_threshold: float = 1.0, exclude_pattern: Optional[str] = None) -> Tuple[List[str], Set[str]]:
     """
     Process the lines from the file to remove duplicates while preserving order.
     
@@ -515,6 +515,7 @@ def process_lines(lines: List[str], comparison_mode: str, show_progress: bool,
         comparison_mode: How to compare lines
         show_progress: Whether to show a progress bar
         similarity_threshold: Threshold for fuzzy matching (0-1)
+        exclude_pattern: Regex pattern for lines to exclude from processing
     
     Returns:
         A tuple containing (list of unique lines, set of normalized lines seen)
@@ -524,6 +525,16 @@ def process_lines(lines: List[str], comparison_mode: str, show_progress: bool,
     
     # Using a set for exact matches and a list for fuzzy matches to optimize memory usage
     seen_exact = set()
+    
+    # Compile regex pattern if provided
+    exclude_regex = None
+    if exclude_pattern:
+        try:
+            exclude_regex = re.compile(exclude_pattern)
+            logging.debug(f"Using exclude pattern: {exclude_pattern}")
+        except re.error as e:
+            logging.error(f"Invalid regex pattern: {exclude_pattern} - {str(e)}")
+            logging.warning("Continuing without exclude pattern")
     
     # For very large files with fuzzy matching, we'll use a bloom filter-like approach
     # to reduce memory usage at the cost of a small chance of false positives
@@ -550,6 +561,12 @@ def process_lines(lines: List[str], comparison_mode: str, show_progress: bool,
             # Only add empty line if we haven't seen it before (preserve some formatting)
             if not any(l.strip() == '' for l in unique_lines[-3:] if unique_lines):
                 unique_lines.append(line)
+            continue
+        
+        # Skip lines matching the exclude pattern
+        if exclude_regex and exclude_regex.search(line):
+            logging.debug(f"Skipping excluded line: {line.strip()}")
+            unique_lines.append(line)  # Keep the line but don't check for duplicates
             continue
             
         # Normalize the line for comparison based on comparison mode
