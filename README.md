@@ -258,6 +258,12 @@ python main.py your_file.txt --report yaml --report-file report.yaml
 # Generate a Markdown report for documentation
 python main.py your_file.txt --report markdown --report-file report.md
 
+# Enable colored output in text reports
+python main.py your_file.txt --color
+
+# Use quiet mode to suppress all non-error output
+python main.py your_file.txt -q
+
 # Save results and generate a JSON report
 python main.py your_file.txt -o output_directory/ --report json --report-file report.json
 ```
@@ -267,6 +273,9 @@ python main.py your_file.txt -o output_directory/ --report json --report-file re
 ```bash
 # Create backups before processing
 python main.py your_file.txt --backup
+
+# Create backups with custom extension
+python main.py your_file.txt --backup --backup-ext .original
 
 # Dry run - preview changes without modifying files
 python main.py your_file.txt --dry-run
