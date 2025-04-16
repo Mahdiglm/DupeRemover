@@ -177,7 +177,8 @@ class Spinner:
 def remove_duplicates(file_path: str, comparison_mode: str = "case-insensitive", 
                       create_backup: bool = False, show_progress: bool = True,
                       output_file: Optional[str] = None, chunk_size: int = 1024*1024,
-                      dry_run: bool = False, similarity_threshold: float = 0.8) -> Dict:
+                      dry_run: bool = False, similarity_threshold: float = 0.8,
+                      backup_extension: str = ".bak") -> Dict:
     """
     Remove duplicate lines from a text file based on specified comparison mode.
     
@@ -190,6 +191,7 @@ def remove_duplicates(file_path: str, comparison_mode: str = "case-insensitive",
         chunk_size: Size of chunks when processing large files
         dry_run: If True, only report what would be done without making changes
         similarity_threshold: Threshold for fuzzy matching (0-1)
+        backup_extension: Extension for backup files
     
     Returns:
         Dictionary containing statistics about the operation
@@ -265,7 +267,7 @@ def remove_duplicates(file_path: str, comparison_mode: str = "case-insensitive",
         
         # Create backup if requested
         if create_backup and not dry_run:
-            backup_path = f"{file_path}.bak"
+            backup_path = f"{file_path}{backup_extension}"
             logging.info(f"Creating backup at: {backup_path}")
             try:
                 shutil.copy2(file_path, backup_path)
@@ -591,7 +593,8 @@ def process_multiple_files(file_paths: List[str], comparison_mode: str,
                          parallel: bool = False, max_workers: int = None,
                          chunk_size: int = 1024*1024,
                          dry_run: bool = False,
-                         similarity_threshold: float = 0.8) -> List[Dict]:
+                         similarity_threshold: float = 0.8,
+                         backup_extension: str = ".bak") -> List[Dict]:
     """
     Process multiple files and remove duplicates from each.
     
@@ -606,6 +609,7 @@ def process_multiple_files(file_paths: List[str], comparison_mode: str,
         chunk_size: Size of chunks when processing large files
         dry_run: If True, only report what would be done without making changes
         similarity_threshold: Threshold for fuzzy matching (0-1)
+        backup_extension: Extension for backup files
         
     Returns:
         List of statistics dictionaries for each file
@@ -631,7 +635,7 @@ def process_multiple_files(file_paths: List[str], comparison_mode: str,
                 output_file = output_files[file_path] if output_files else None
                 return remove_duplicates(file_path, comparison_mode, create_backup, 
                                         show_progress, output_file, chunk_size,
-                                        dry_run, similarity_threshold)
+                                        dry_run, similarity_threshold, backup_extension)
             except Exception as e:
                 logging.error(f"Failed to process {file_path}: {str(e)}")
                 return {"file_path": file_path, "error": str(e)}
@@ -667,7 +671,7 @@ def process_multiple_files(file_paths: List[str], comparison_mode: str,
                 output_file = output_files[file_path] if output_files else None
                 stats = remove_duplicates(file_path, comparison_mode, create_backup, 
                                          show_progress, output_file, chunk_size,
-                                         dry_run, similarity_threshold)
+                                         dry_run, similarity_threshold, backup_extension)
                 results.append(stats)
                 
                 # Log the results for this file
@@ -1034,6 +1038,11 @@ def parse_arguments():
         help="Create backup files before making changes"
     )
     process_group.add_argument(
+        "--backup-ext",
+        default=".bak",
+        help="Extension for backup files (default: .bak)"
+    )
+    process_group.add_argument(
         "-p", "--progress",
         action="store_true",
         help="Show progress bar when processing"
@@ -1139,7 +1148,8 @@ def main() -> None:
         args.workers,
         args.chunk_size,
         args.dry_run,
-        args.similarity if args.mode == "fuzzy" else 1.0
+        args.similarity if args.mode == "fuzzy" else 1.0,
+        args.backup_ext
     )
     
     end_time = os.times()
