@@ -1078,6 +1078,12 @@ def parse_arguments():
         help="Enable colored output in text reports"
     )
     
+    other_group.add_argument(
+        "-q", "--quiet",
+        action="store_true",
+        help="Suppress all non-error output"
+    )
+    
     return parser.parse_args()
 
 
@@ -1087,7 +1093,16 @@ def main() -> None:
     args = parse_arguments()
     
     # Setup logging
-    setup_logging(args.verbose, args.log_file)
+    if args.quiet:
+        logging.basicConfig(level=logging.ERROR, format='%(levelname)s: %(message)s')
+        if args.log_file:
+            # Add file handler for all logs despite quiet mode
+            file_handler = logging.FileHandler(args.log_file, mode='w')
+            file_handler.setLevel(logging.DEBUG if args.verbose else logging.INFO)
+            file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+            logging.getLogger().addHandler(file_handler)
+    else:
+        setup_logging(args.verbose, args.log_file)
     
     # Ensure at least one input source is provided
     if not args.files and not args.directory:
@@ -1132,11 +1147,12 @@ def main() -> None:
     
     # Generate and display report
     report = generate_report(results, args.report, args.report_file, args.color)
-    if not args.report_file:
+    if not args.report_file and not args.quiet:
         print("\n" + report)
     
     # Print timing information
-    print(f"\nProcessing completed in {elapsed:.2f} seconds")
+    if not args.quiet:
+        print(f"\nProcessing completed in {elapsed:.2f} seconds")
     
     logging.info("Duplicate removal completed")
     
