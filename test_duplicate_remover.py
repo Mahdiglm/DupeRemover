@@ -164,6 +164,33 @@ class TestFileOperations(unittest.TestCase):
         self.assertEqual(result["unique_lines"], 0)
         self.assertEqual(result["duplicates_removed"], 0)
 
+    def test_remove_duplicates_with_exclude(self):
+        """Test removing duplicates while excluding specific patterns."""
+        # Create a test file with lines to exclude
+        exclude_file_path = os.path.join(self.temp_dir, "exclude_test.txt")
+        with open(exclude_file_path, "w") as f:
+            f.write("Line 1\n")
+            f.write("IMPORTANT: Do not remove this line\n")
+            f.write("Line 1\n")  # Duplicate
+            f.write("IMPORTANT: Another critical line\n")
+            f.write("Line 2\n")
+            f.write("Line 2\n")  # Duplicate
+        
+        # Process with exclude pattern for "IMPORTANT" lines
+        result = remove_duplicates(
+            exclude_file_path,
+            comparison_mode="case-insensitive",
+            show_progress=False,
+            dry_run=True,
+            exclude_pattern=r"^IMPORTANT:"
+        )
+        
+        # 6 total lines, 2 excluded from deduplication, 2 unique content lines
+        # So we should have 4 unique lines in the result: 2 excluded + 2 content
+        self.assertEqual(result["total_lines"], 6)
+        self.assertEqual(result["unique_lines"], 4)
+        self.assertEqual(result["duplicates_removed"], 2)
+
 
 class TestReportGeneration(unittest.TestCase):
     """Tests for the generate_report function."""
