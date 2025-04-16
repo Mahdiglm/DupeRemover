@@ -8,7 +8,7 @@
 
   <!-- BADGES -->
   <p align="center">
-    <a href="https://github.com/Mahdiglm/DupeRemover/releases"><img src="https://img.shields.io/badge/version-2.0.3-brightgreen.svg?style=for-the-badge" alt="Version"></a>
+    <a href="https://github.com/Mahdiglm/DupeRemover/releases"><img src="https://img.shields.io/badge/version-2.1.0-brightgreen.svg?style=for-the-badge" alt="Version"></a>
     <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.6+-blue.svg?style=for-the-badge&logo=python&logoColor=white" alt="Python"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge" alt="License"></a>
     <a href="#project-status"><img src="https://img.shields.io/badge/status-maintenance-yellow.svg?style=for-the-badge" alt="Status"></a>

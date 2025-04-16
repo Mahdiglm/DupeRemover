@@ -1,7 +1,7 @@
 """
 duplicate_remover.py - Removes duplicates from text files with various comparison options.
 Supports multiple files, progress tracking, and backup creation.
-Version 2.0.4-dev - Development version for future enhancements.
+Version 2.1.0 - Development version for future enhancements.
 """
 
 import os
@@ -22,6 +22,9 @@ import signal
 from datetime import datetime
 import json
 import csv
+
+# Version information
+__version__ = "2.1.0"
 
 
 def setup_logging(verbose: bool = False, log_file: Optional[str] = None) -> None:
