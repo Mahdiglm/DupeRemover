@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 > **Note:** Version 2.0.0 is the final planned major release. The project is now in maintenance mode, accepting only bug fixes and minor improvements.
 
+## [2.0.4] - Unreleased
+
+### Added
+
+- TBD
+
 ## [2.0.3] - 2025-07-15
 
 ### Added
