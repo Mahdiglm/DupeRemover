@@ -1003,6 +1003,12 @@ def parse_arguments():
         help="Show what would be done without making changes"
     )
     
+    other_group.add_argument(
+        "--color",
+        action="store_true",
+        help="Enable colored output in text reports"
+    )
+    
     return parser.parse_args()
 
 
