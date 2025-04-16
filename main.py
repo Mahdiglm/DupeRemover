@@ -16,6 +16,8 @@ import itertools
 from typing import List, Set, Dict, Tuple, Generator, Any, Optional, Union
 from tqdm import tqdm
 from pathlib import Path
+import threading
+import time
 
 
 def setup_logging(verbose: bool = False, log_file: Optional[str] = None) -> None:
@@ -127,6 +129,51 @@ def detect_encoding(file_path: str) -> str:
     return 'utf-8'  # Default fallback
 
 
+class Spinner:
+    """A simple progress spinner for small operations."""
+    
+    def __init__(self, message="Processing", delay=0.1):
+        """Initialize the spinner with a message and delay."""
+        self.message = message
+        self.delay = delay
+        self.spinner_cycle = itertools.cycle(['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'])
+        self.running = False
+        self.spinner_thread = None
+        
+    def __enter__(self):
+        """Start the spinner when entering a context."""
+        self.start()
+        return self
+        
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Stop the spinner when exiting a context."""
+        self.stop()
+        
+    def start(self):
+        """Start the spinner in a separate thread."""
+        self.running = True
+        self.spinner_thread = threading.Thread(target=self._spin)
+        self.spinner_thread.daemon = True
+        self.spinner_thread.start()
+        
+    def stop(self):
+        """Stop the spinner."""
+        self.running = False
+        if self.spinner_thread:
+            self.spinner_thread.join()
+        # Clear the line
+        sys.stdout.write('\r' + ' ' * (len(self.message) + 10) + '\r')
+        sys.stdout.flush()
+        
+    def _spin(self):
+        """Display the spinner animation."""
+        while self.running:
+            frame = next(self.spinner_cycle)
+            sys.stdout.write(f'\r{frame} {self.message}... ')
+            sys.stdout.flush()
+            time.sleep(self.delay)
+
+
 def remove_duplicates(file_path: str, comparison_mode: str = "case-insensitive", 
                       create_backup: bool = False, show_progress: bool = True,
                       output_file: Optional[str] = None, chunk_size: int = 1024*1024,
@@ -236,10 +283,15 @@ def remove_duplicates(file_path: str, comparison_mode: str = "case-insensitive",
         unique_lines = []
         seen_lines = set()
         
-        # Setup progress bar if requested
+        # Setup progress bar or spinner based on file size
         pbar = None
-        if show_progress and file_size > chunk_size:
-            pbar = tqdm(total=file_size, unit='B', unit_scale=True, desc=f"Processing {os.path.basename(file_path)}")
+        spinner = None
+        if show_progress:
+            if file_size > chunk_size:
+                pbar = tqdm(total=file_size, unit='B', unit_scale=True, desc=f"Processing {os.path.basename(file_path)}")
+            else:
+                spinner = Spinner(f"Processing {os.path.basename(file_path)}")
+                spinner.start()
         
         # Process file in chunks for memory efficiency
         try:
@@ -257,11 +309,15 @@ def remove_duplicates(file_path: str, comparison_mode: str = "case-insensitive",
             logging.error(f"Error processing file {file_path}: {str(e)}")
             if pbar:
                 pbar.close()
+            if spinner:
+                spinner.stop()
             raise
         
-        # Close progress bar if it was created
+        # Close progress tracking
         if pbar:
             pbar.close()
+        if spinner:
+            spinner.stop()
         
         # Calculate statistics
         unique_count = len(unique_lines)
