@@ -75,6 +75,10 @@ DupeRemover helps you eliminate duplicate content from text files while providin
   - Content-hash for word order independence
   - Alphanumeric-only filtering
   - Fuzzy matching with adjustable similarity
+- **Multi-language support**:
+  - Automatic language detection
+  - Special handling for Chinese, Japanese, Korean, and Arabic text
+  - Line-by-line language detection for mixed-language files
 - **Smart encoding detection** for various file formats
 
 ### Comprehensive Reporting
@@ -223,6 +227,19 @@ python main.py -d your_directory/
 | Content-hash           | `--mode content-hash`           | Ignores word order in lines                    |
 | Alphanumeric-only      | `--mode alphanumeric-only`      | Ignores all non-alphanumeric characters        |
 | Fuzzy                  | `--mode fuzzy`                  | Finds near-duplicate lines based on similarity |
+
+### Language Options
+
+```bash
+# Specify a language code for better text normalization
+python main.py your_file.txt --language ja
+
+# Automatically detect the document language
+python main.py your_file.txt --auto-detect-language
+
+# Detect language per line (for mixed content files)
+python main.py your_file.txt --auto-detect-language --detect-per-line
+```
 
 ### Advanced Processing
 
