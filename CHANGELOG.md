@@ -7,11 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 > **Note:** Version 2.0.0 is the final planned major release. The project is now in maintenance mode, accepting only bug fixes and minor improvements.
 
-## [2.0.4] - Unreleased
+## [2.1.0] - Unreleased
 
 ### Added
 
 - TBD
+
+## [2.0.4] - 2025-07-25
+
+### Added
+
+- New `--exclude-pattern` command-line option for excluding lines matching a regex pattern from deduplication
+- Improved handling of special cases in streaming mode
+- Enhanced documentation with examples for pattern exclusion
+- Better error reporting for invalid regex patterns
 
 ## [2.0.3] - 2025-07-15
 
