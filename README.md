@@ -230,6 +230,9 @@ python main.py -d your_directory/
 # Fuzzy matching with 70% similarity threshold
 python main.py your_file.txt --mode fuzzy --similarity 0.7
 
+# Exclude lines matching a pattern from deduplication
+python main.py your_file.txt --exclude-pattern "^IMPORTANT:"
+
 # Parallel processing with custom worker count
 python main.py *.txt --parallel --workers 4
 
@@ -276,6 +279,9 @@ python main.py your_file.txt --backup
 
 # Create backups with custom extension
 python main.py your_file.txt --backup --backup-ext .original
+
+# Preserve file permissions when writing output files
+python main.py your_file.txt --preserve-permissions
 
 # Dry run - preview changes without modifying files
 python main.py your_file.txt --dry-run
