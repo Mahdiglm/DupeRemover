@@ -1,7 +1,7 @@
 """
 duplicate_remover.py - Removes duplicates from text files with various comparison options.
 Supports multiple files, progress tracking, and backup creation.
-Version 2.0.3 - Added colored output, progress spinner, and additional usability options.
+Version 2.0.4-dev - Development version for future enhancements.
 """
 
 import os
@@ -178,7 +178,8 @@ def remove_duplicates(file_path: str, comparison_mode: str = "case-insensitive",
                       create_backup: bool = False, show_progress: bool = True,
                       output_file: Optional[str] = None, chunk_size: int = 1024*1024,
                       dry_run: bool = False, similarity_threshold: float = 0.8,
-                      backup_extension: str = ".bak", preserve_permissions: bool = False) -> Dict:
+                      backup_extension: str = ".bak", preserve_permissions: bool = False,
+                      exclude_pattern: Optional[str] = None) -> Dict:
     """
     Remove duplicate lines from a text file based on specified comparison mode.
     
@@ -193,6 +194,7 @@ def remove_duplicates(file_path: str, comparison_mode: str = "case-insensitive",
         similarity_threshold: Threshold for fuzzy matching (0-1)
         backup_extension: Extension for backup files
         preserve_permissions: Whether to preserve file permissions when writing output files
+        exclude_pattern: Regex pattern for lines to exclude from processing
     
     Returns:
         Dictionary containing statistics about the operation
@@ -303,7 +305,7 @@ def remove_duplicates(file_path: str, comparison_mode: str = "case-insensitive",
                     pbar.update(len('\n'.join(chunk).encode(encoding, errors='ignore')))
                 
                 # Process this chunk of lines
-                chunk_lines, chunk_seen = process_lines(chunk, comparison_mode, show_progress, similarity_threshold)
+                chunk_lines, chunk_seen = process_lines(chunk, comparison_mode, show_progress, similarity_threshold, exclude_pattern)
                 
                 total_lines += len(chunk)
                 unique_lines.extend(chunk_lines)
@@ -631,7 +633,8 @@ def process_multiple_files(file_paths: List[str], comparison_mode: str,
                          dry_run: bool = False,
                          similarity_threshold: float = 0.8,
                          backup_extension: str = ".bak",
-                         preserve_permissions: bool = False) -> List[Dict]:
+                         preserve_permissions: bool = False,
+                         exclude_pattern: Optional[str] = None) -> List[Dict]:
     """
     Process multiple files and remove duplicates from each.
     
@@ -648,6 +651,7 @@ def process_multiple_files(file_paths: List[str], comparison_mode: str,
         similarity_threshold: Threshold for fuzzy matching (0-1)
         backup_extension: Extension for backup files
         preserve_permissions: Whether to preserve file permissions when writing output files
+        exclude_pattern: Regex pattern for lines to exclude from processing
         
     Returns:
         List of statistics dictionaries for each file
@@ -664,65 +668,25 @@ def process_multiple_files(file_paths: List[str], comparison_mode: str,
         os.makedirs(output_dir, exist_ok=True)
         output_files = {path: os.path.join(output_dir, os.path.basename(path)) for path in file_paths}
     
-    if parallel and len(file_paths) > 1:
-        logging.info(f"Processing {len(file_paths)} files in parallel")
-        
-        # Define a function for parallel execution
-        def process_file(file_path):
-            try:
-                output_file = output_files[file_path] if output_files else None
-                return remove_duplicates(file_path, comparison_mode, create_backup, 
-                                        show_progress, output_file, chunk_size,
-                                        dry_run, similarity_threshold, backup_extension,
-                                        preserve_permissions)
-            except Exception as e:
-                logging.error(f"Failed to process {file_path}: {str(e)}")
-                return {"file_path": file_path, "error": str(e)}
-        
-        # Process files in parallel
-        with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
-            futures = {executor.submit(process_file, path): path for path in file_paths}
+    for file_path in file_paths:
+        try:
+            result = remove_duplicates(
+                file_path, comparison_mode, create_backup, show_progress,
+                output_files[file_path] if output_files else None, 1024*1024, dry_run, similarity_threshold, 
+                backup_extension, preserve_permissions, exclude_pattern
+            )
             
-            if show_progress:
-                futures_iterator = tqdm(concurrent.futures.as_completed(futures), 
-                                       total=len(file_paths), desc="Files", unit="file")
-            else:
-                futures_iterator = concurrent.futures.as_completed(futures)
+            results.append(result)
             
-            for future in futures_iterator:
-                file_path = futures[future]
-                try:
-                    stats = future.result()
-                    results.append(stats)
-                    
-                    if "error" not in stats:
-                        logging.info(f"Results for {file_path}:")
-                        logging.info(f"  Original line count: {stats['total_lines']}")
-                        logging.info(f"  Unique lines: {stats['unique_lines']}")
-                        logging.info(f"  Duplicates removed: {stats['duplicates_removed']}")
-                except Exception as e:
-                    logging.error(f"Exception processing {file_path}: {str(e)}")
-                    results.append({"file_path": file_path, "error": str(e)})
-    else:
-        # Process files sequentially
-        for file_path in file_paths:
-            try:
-                output_file = output_files[file_path] if output_files else None
-                stats = remove_duplicates(file_path, comparison_mode, create_backup, 
-                                         show_progress, output_file, chunk_size,
-                                         dry_run, similarity_threshold, backup_extension,
-                                         preserve_permissions)
-                results.append(stats)
-                
-                # Log the results for this file
-                logging.info(f"Results for {file_path}:")
-                logging.info(f"  Original line count: {stats['total_lines']}")
-                logging.info(f"  Unique lines: {stats['unique_lines']}")
-                logging.info(f"  Duplicates removed: {stats['duplicates_removed']}")
-                
-            except Exception as e:
-                logging.error(f"Failed to process {file_path}: {str(e)}")
-                results.append({"file_path": file_path, "error": str(e)})
+            # Log the results for this file
+            logging.info(f"Results for {file_path}:")
+            logging.info(f"  Original line count: {result['total_lines']}")
+            logging.info(f"  Unique lines: {result['unique_lines']}")
+            logging.info(f"  Duplicates removed: {result['duplicates_removed']}")
+            
+        except Exception as e:
+            logging.error(f"Failed to process {file_path}: {str(e)}")
+            results.append({"file_path": file_path, "error": str(e)})
     
     return results
 
@@ -1199,7 +1163,8 @@ def main() -> None:
         args.dry_run,
         args.similarity if args.mode == "fuzzy" else 1.0,
         args.backup_ext,
-        args.preserve_permissions
+        args.preserve_permissions,
+        args.exclude_pattern
     )
     
     end_time = os.times()
