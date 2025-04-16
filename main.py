@@ -1035,6 +1035,10 @@ def parse_arguments():
         default=0.8,
         help="Similarity threshold for fuzzy matching (0-1, default: 0.8, only with --mode fuzzy)"
     )
+    comparison_group.add_argument(
+        "--exclude-pattern",
+        help="Regex pattern for lines to exclude from processing"
+    )
     
     # Output options
     output_group = parser.add_argument_group('Output Options')
