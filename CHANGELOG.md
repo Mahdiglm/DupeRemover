@@ -17,10 +17,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- New `--exclude-pattern` command-line option for excluding lines matching a regex pattern from deduplication
-- Improved handling of special cases in streaming mode
-- Enhanced documentation with examples for pattern exclusion
-- Better error reporting for invalid regex patterns
+- **Pattern Exclusion**: New `--exclude-pattern` command-line option allows users to specify a regex pattern for lines that should be excluded from deduplication processing
+  - Lines matching the pattern are preserved in the output regardless of duplication
+  - Especially useful for preserving headers, timestamps, or other special content
+  - Supports all standard regex syntax with proper error handling for invalid patterns
+- **Streaming Mode Enhancements**:
+  - Improved buffer management for real-time processing
+  - Added pattern exclusion support to streaming mode
+  - Better memory usage when following large log files
+- **Performance Improvements**:
+  - Optimized regex pattern compilation and matching
+  - More efficient handling of very large files with exclude patterns
+  - Reduced unnecessary pattern matching for empty lines
+- **Documentation**:
+  - Added comprehensive examples for pattern exclusion in README
+  - Updated help documentation with detailed pattern usage examples
+  - Added warnings and guidelines for complex regex patterns
+
+### Fixed
+
+- Indentation issues in try-except blocks
+- Memory leak when processing extremely large files with certain pattern combinations
+- Improved error handling for malformed regex patterns
+- Fixed edge case where empty lines weren't properly processed with exclusion patterns
 
 ## [2.0.3] - 2025-07-15
 
