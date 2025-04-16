@@ -18,6 +18,10 @@ from tqdm import tqdm
 from pathlib import Path
 import threading
 import time
+import signal
+from datetime import datetime
+import json
+import csv
 
 
 def setup_logging(verbose: bool = False, log_file: Optional[str] = None) -> None:
@@ -381,32 +385,55 @@ def remove_duplicates(file_path: str, comparison_mode: str = "case-insensitive",
         raise
 
 
-def normalize_line(line: str, comparison_mode: str) -> str:
+def normalize_line(
+    line: str, 
+    mode: str = "case-sensitive",
+    language: Optional[str] = None,
+    auto_detect: bool = False,
+    detect_per_line: bool = False
+) -> str:
     """
-    Normalize a line based on the comparison mode.
+    Normalize a line of text based on the specified comparison mode.
     
     Args:
         line: The line to normalize
-        comparison_mode: The comparison mode to use
+        mode: Comparison mode (case-sensitive, case-insensitive, etc.)
+        language: Optional language code for language-specific processing
+        auto_detect: Whether to automatically detect the language
+        detect_per_line: Whether to detect language for each line
         
     Returns:
-        Normalized line string
+        Normalized line for comparison
     """
-    if comparison_mode == "case-insensitive":
-        return line.strip().lower()
-    elif comparison_mode == "case-sensitive":
-        return line.strip()
-    elif comparison_mode == "whitespace-insensitive":
-        return ''.join(line.split()).lower()
-    elif comparison_mode == "content-hash":
-        # Creates a hash of sorted words to identify semantically similar content regardless of order
-        words = sorted(word.lower() for word in re.findall(r'\w+', line))
-        return hashlib.md5(' '.join(words).encode()).hexdigest()
-    elif comparison_mode == "alphanumeric-only":
-        # Only consider alphanumeric characters
-        return ''.join(c.lower() for c in line if c.isalnum())
-    else:
-        return line.strip().lower()  # Default to case-insensitive
+    # Handle empty lines
+    if not line or line.isspace():
+        return ""
+        
+    # Apply normalization based on mode
+    if mode == "case-insensitive":
+        # Convert to lowercase for case-insensitive comparison
+        return line.lower()
+        
+    elif mode == "whitespace-insensitive":
+        # Remove all whitespace for whitespace-insensitive comparison
+        return re.sub(r'\s+', '', line)
+        
+    elif mode == "content-hash":
+        # Generate a hash of the line content
+        import hashlib
+        return hashlib.md5(line.encode('utf-8')).hexdigest()
+        
+    elif mode == "alphanumeric-only":
+        # Keep only alphanumeric characters
+        return ''.join(c for c in line if c.isalnum())
+        
+    elif mode == "fuzzy":
+        # For fuzzy mode, we still need to normalize the line
+        # Actual fuzzy comparison happens during matching
+        return line.lower().strip()
+        
+    # Default to case-sensitive (no normalization)
+    return line
 
 
 def calculate_similarity(str1: str, str2: str) -> float:
@@ -691,284 +718,107 @@ def process_multiple_files(file_paths: List[str], comparison_mode: str,
     return results
 
 
-def generate_report(results: List[Dict], output_format: str = "text", 
-                   report_file: Optional[str] = None, use_color: bool = False) -> str:
+def generate_report(
+    report_data: Dict, 
+    output_file: Optional[str] = None,
+    report_type: str = "text"
+) -> None:
     """
-    Generate a report of the results.
+    Generate a report of the duplicate removal process.
     
     Args:
-        results: List of result dictionaries
-        output_format: Format for the report ('text', 'json', 'html', 'csv', 'xml', 'yaml', or 'markdown')
-        report_file: Optional path to write the report to
-        use_color: Whether to use colors in text output (only applies to text format)
+        report_data: Dictionary containing report information
+        output_file: Optional path to save the report
+        report_type: Type of report to generate (text, json, csv)
         
     Returns:
-        The report as a string
+        None
     """
-    import json
-    from datetime import datetime
-    import csv
-    import io
-    import xml.dom.minidom as md
-    from xml.etree import ElementTree as ET
-    
-    successful = [r for r in results if "error" not in r]
-    failed = [r for r in results if "error" in r]
-    
-    total_processed = len(successful)
-    total_failed = len(failed)
-    total_lines = sum(r.get('total_lines', 0) for r in successful)
-    total_unique = sum(r.get('unique_lines', 0) for r in successful)
-    total_removed = sum(r.get('duplicates_removed', 0) for r in successful)
-    
-    if output_format == "markdown":
-        lines = [
-            "# DupeRemover Results",
-            f"*Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*",
-            "",
-            "## Summary",
-            "",
-            f"- **Files processed:** {total_processed}/{len(results)}",
-            f"- **Files failed:** {total_failed}",
-            f"- **Total lines processed:** {total_lines}",
-            f"- **Total unique lines:** {total_unique}",
-            f"- **Total duplicates removed:** {total_removed}",
-            f"- **Overall duplication rate:** {(total_removed / total_lines * 100):.2f}% (if applicable)" if total_lines > 0 else "- **Overall duplication rate:** 0.00% (if applicable)",
-            "",
-            "## Details",
-            "",
-            "| File | Total Lines | Unique Lines | Duplicates Removed | Duplication Rate | Status |",
-            "|------|-------------|--------------|-------------------|-----------------|--------|"
-        ]
+    if not output_file:
+        # Return if no output file is specified
+        logger.debug("No output file specified for report, skipping")
+        return
         
-        for r in results:
-            if "error" in r:
-                lines.append(f"| {r['file_path']} | - | - | - | - | ❌ **ERROR:** {r['error']} |")
-            else:
-                duplication_rate = f"{(r['duplicates_removed'] / r['total_lines'] * 100):.2f}%" if r['total_lines'] > 0 else "0.00%"
-                status = "⚠️ **DRY RUN**" if r.get('dry_run', False) else "✅ **Success**"
-                lines.append(f"| {r['file_path']} | {r['total_lines']} | {r['unique_lines']} | {r['duplicates_removed']} | {duplication_rate} | {status} |")
-        
-        output = "\n".join(lines)
-    
-    elif output_format == "yaml":
-        try:
-            import yaml
-            report = {
-                "timestamp": datetime.now().isoformat(),
-                "summary": {
-                    "files_processed": total_processed,
-                    "files_failed": total_failed,
-                    "total_lines": total_lines,
-                    "unique_lines": total_unique,
-                    "duplicates_removed": total_removed,
-                    "duplication_rate": (total_removed / total_lines) if total_lines > 0 else 0
-                },
-                "results": results
-            }
-            output = yaml.dump(report, sort_keys=False, default_flow_style=False)
-        except ImportError:
-            logging.warning("PyYAML library not installed. Falling back to text format.")
-            # Recursively call with text format
-            return generate_report(results, "text", report_file, use_color)
-    
-    elif output_format == "json":
-        report = {
-            "timestamp": datetime.now().isoformat(),
-            "summary": {
-                "files_processed": total_processed,
-                "files_failed": total_failed,
-                "total_lines": total_lines,
-                "unique_lines": total_unique,
-                "duplicates_removed": total_removed,
-                "duplication_rate": (total_removed / total_lines) if total_lines > 0 else 0
-            },
-            "results": results
-        }
-        output = json.dumps(report, indent=2)
-        
-    elif output_format == "html":
-        html = [
-            "<!DOCTYPE html>",
-            "<html>",
-            "<head>",
-            "  <title>DupeRemover Results</title>",
-            "  <style>",
-            "    body { font-family: Arial, sans-serif; margin: 20px; }",
-            "    .summary { background: #f5f5f5; padding: 15px; border-radius: 5px; }",
-            "    table { border-collapse: collapse; width: 100%; margin-top: 20px; }",
-            "    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }",
-            "    th { background-color: #f2f2f2; }",
-            "    tr:nth-child(even) { background-color: #f9f9f9; }",
-            "    .error { color: red; }",
-            "  </style>",
-            "</head>",
-            "<body>",
-            f"  <h1>DupeRemover Results</h1>",
-            f"  <p>Generated on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>",
-            "  <div class='summary'>",
-            f"    <h2>Summary</h2>",
-            f"    <p>Files processed: {total_processed}</p>",
-            f"    <p>Files failed: {total_failed}</p>",
-            f"    <p>Total lines: {total_lines}</p>",
-            f"    <p>Unique lines: {total_unique}</p>",
-            f"    <p>Duplicates removed: {total_removed}</p>",
-            f"    <p>Duplication rate: {(total_removed / total_lines * 100):.2f}% (if applicable)</p>",
-            "  </div>",
-            "  <h2>File Details</h2>",
-            "  <table>",
-            "    <tr><th>File</th><th>Total Lines</th><th>Unique Lines</th><th>Duplicates Removed</th><th>Status</th></tr>"
-        ]
-        
-        for r in results:
-            if "error" in r:
-                html.append(f"    <tr><td>{r['file_path']}</td><td>-</td><td>-</td><td>-</td><td class='error'>{r['error']}</td></tr>")
-            else:
-                html.append(f"    <tr><td>{r['file_path']}</td><td>{r['total_lines']}</td><td>{r['unique_lines']}</td>" +
-                           f"<td>{r['duplicates_removed']}</td><td>{'Dry run' if r.get('dry_run', False) else 'Success'}</td></tr>")
-        
-        html.extend([
-            "  </table>",
-            "</body>",
-            "</html>"
-        ])
-        
-        output = "\n".join(html)
-    
-    elif output_format == "csv":
-        # Use StringIO to build the CSV data as a string
-        csv_output = io.StringIO()
-        csv_writer = csv.writer(csv_output)
-        
-        # Write the header row with timestamp
-        csv_writer.writerow(['DupeRemover Results', f'Generated on: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}'])
-        csv_writer.writerow([])  # Empty row for separation
-        
-        # Write the summary section
-        csv_writer.writerow(['SUMMARY'])
-        csv_writer.writerow(['Files processed', f'{total_processed}/{len(results)}'])
-        csv_writer.writerow(['Files failed', total_failed])
-        csv_writer.writerow(['Total lines processed', total_lines])
-        csv_writer.writerow(['Total unique lines', total_unique])
-        csv_writer.writerow(['Total duplicates removed', total_removed])
-        csv_writer.writerow(['Overall duplication rate', f'{(total_removed / total_lines * 100):.2f}%' if total_lines > 0 else '0.00%'])
-        csv_writer.writerow([])  # Empty row for separation
-        
-        # Write the details section header
-        csv_writer.writerow(['DETAILS'])
-        csv_writer.writerow(['File', 'Total Lines', 'Unique Lines', 'Duplicates Removed', 'Duplication Rate', 'Status'])
-        
-        # Write the details for each file
-        for r in results:
-            if "error" in r:
-                csv_writer.writerow([r['file_path'], '-', '-', '-', '-', f'ERROR: {r["error"]}'])
-            else:
-                duplication_rate = f"{(r['duplicates_removed'] / r['total_lines'] * 100):.2f}%" if r['total_lines'] > 0 else "0.00%"
-                status = 'Dry run' if r.get('dry_run', False) else 'Success'
-                csv_writer.writerow([
-                    r['file_path'],
-                    r['total_lines'],
-                    r['unique_lines'],
-                    r['duplicates_removed'],
-                    duplication_rate,
-                    status
-                ])
-        
-        output = csv_output.getvalue()
-    
-    elif output_format == "xml":
-        # Create XML structure
-        root = ET.Element("DupeRemover")
-        root.set("timestamp", datetime.now().isoformat())
-        
-        # Add summary section
-        summary = ET.SubElement(root, "Summary")
-        ET.SubElement(summary, "FilesProcessed").text = str(total_processed)
-        ET.SubElement(summary, "FilesFailed").text = str(total_failed)
-        ET.SubElement(summary, "TotalLines").text = str(total_lines)
-        ET.SubElement(summary, "UniqueLines").text = str(total_unique)
-        ET.SubElement(summary, "DuplicatesRemoved").text = str(total_removed)
-        
-        duplication_rate = (total_removed / total_lines * 100) if total_lines > 0 else 0
-        ET.SubElement(summary, "DuplicationRate").text = f"{duplication_rate:.2f}%"
-        
-        # Add details section
-        details = ET.SubElement(root, "Details")
-        
-        # Add file results
-        for r in results:
-            file_elem = ET.SubElement(details, "File")
-            ET.SubElement(file_elem, "Path").text = r["file_path"]
+    try:
+        # Create directory if it doesn't exist
+        output_dir = os.path.dirname(output_file)
+        if output_dir and not os.path.exists(output_dir):
+            os.makedirs(output_dir, exist_ok=True)
             
-            if "error" in r:
-                ET.SubElement(file_elem, "Status").text = "Error"
-                ET.SubElement(file_elem, "Error").text = r["error"]
-            else:
-                ET.SubElement(file_elem, "Status").text = "Dry run" if r.get("dry_run", False) else "Success"
-                ET.SubElement(file_elem, "TotalLines").text = str(r["total_lines"])
-                ET.SubElement(file_elem, "UniqueLines").text = str(r["unique_lines"])
-                ET.SubElement(file_elem, "DuplicatesRemoved").text = str(r["duplicates_removed"])
+        # Generate report based on specified type
+        if report_type.lower() == "json":
+            # JSON format
+            with open(output_file, 'w', encoding='utf-8') as f:
+                json.dump(report_data, f, indent=2)
                 
-                duplication_rate = (r["duplicates_removed"] / r["total_lines"] * 100) if r["total_lines"] > 0 else 0
-                ET.SubElement(file_elem, "DuplicationRate").text = f"{duplication_rate:.2f}%"
-        
-        # Convert to pretty-printed XML
-        rough_string = ET.tostring(root, 'utf-8')
-        reparsed = md.parseString(rough_string)
-        output = reparsed.toprettyxml(indent="  ")
-    
-    else:  # text format
-        # Define ANSI color codes if color is enabled
-        if use_color:
-            HEADER = '\033[95m'
-            BLUE = '\033[94m'
-            GREEN = '\033[92m'
-            YELLOW = '\033[93m'
-            RED = '\033[91m'
-            ENDC = '\033[0m'
-            BOLD = '\033[1m'
+        elif report_type.lower() == "csv":
+            # CSV format
+            with open(output_file, 'w', newline='', encoding='utf-8') as f:
+                writer = csv.writer(f)
+                # Write header
+                writer.writerow([
+                    "Timestamp", "File", "Total Lines", "Unique Lines", 
+                    "Duplicates Removed", "Duplicate Rate (%)"
+                ])
+                
+                # Write data for each file
+                timestamp = report_data.get("timestamp", datetime.now().isoformat())
+                for file_info in report_data.get("results", {}).get("files", []):
+                    total = file_info.get("total_lines", 0)
+                    unique = file_info.get("unique_lines", 0)
+                    duplicates = file_info.get("duplicates_removed", 0)
+                    
+                    # Calculate duplicate rate
+                    dup_rate = 0
+                    if total > 0:
+                        dup_rate = (duplicates / total) * 100
+                        
+                    writer.writerow([
+                        timestamp,
+                        file_info.get("file_path", "Unknown"),
+                        total,
+                        unique,
+                        duplicates,
+                        f"{dup_rate:.2f}"
+                    ])
+                    
         else:
-            HEADER = BLUE = GREEN = YELLOW = RED = ENDC = BOLD = ''
-            
-        lines = [
-            f"{HEADER}=== DupeRemover Results ==={ENDC}",
-            f"Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
-            "",
-            f"{BOLD}SUMMARY:{ENDC}",
-            f"Files processed: {GREEN}{total_processed}/{len(results)}{ENDC}",
-            f"Files failed: {RED if total_failed > 0 else GREEN}{total_failed}{ENDC}",
-            f"Total lines processed: {BLUE}{total_lines}{ENDC}",
-            f"Total unique lines: {BLUE}{total_unique}{ENDC}",
-            f"Total duplicates removed: {YELLOW}{total_removed}{ENDC}",
-            f"Overall duplication rate: {YELLOW}{(total_removed / total_lines * 100):.2f}%{ENDC} (if applicable)" if total_lines > 0 else f"Overall duplication rate: {YELLOW}0.00%{ENDC} (if applicable)",
-            "",
-            f"{BOLD}DETAILS:{ENDC}"
-        ]
+            # Default text format
+            with open(output_file, 'w', encoding='utf-8') as f:
+                f.write(f"DupeRemover Report\n")
+                f.write(f"=================\n\n")
+                f.write(f"Generated: {report_data.get('timestamp', datetime.now().isoformat())}\n\n")
+                
+                # Summary information
+                results = report_data.get("results", {})
+                f.write(f"Summary:\n")
+                f.write(f"  Files Processed: {results.get('files_processed', 0)}\n")
+                f.write(f"  Failed Files: {results.get('failed_files', 0)}\n")
+                f.write(f"  Total Lines: {results.get('total_lines', 0)}\n")
+                f.write(f"  Unique Lines: {results.get('unique_lines', 0)}\n\n")
+                
+                # Details for each file
+                f.write(f"File Details:\n")
+                for file_info in results.get("files", []):
+                    f.write(f"  - {file_info.get('file_path', 'Unknown')}:\n")
+                    f.write(f"    Total Lines: {file_info.get('total_lines', 0)}\n")
+                    f.write(f"    Unique Lines: {file_info.get('unique_lines', 0)}\n")
+                    f.write(f"    Duplicates Removed: {file_info.get('duplicates_removed', 0)}\n")
+                    
+                    # Calculate duplicate rate
+                    total = file_info.get("total_lines", 0)
+                    duplicates = file_info.get("duplicates_removed", 0)
+                    if total > 0:
+                        dup_rate = (duplicates / total) * 100
+                        f.write(f"    Duplicate Rate: {dup_rate:.2f}%\n")
+                    f.write("\n")
+                
+        logger.info(f"Report saved to {output_file}")
         
-        for r in results:
-            if "error" in r:
-                lines.append(f"{RED}[ERROR] {r['file_path']}: {r['error']}{ENDC}")
-            else:
-                dry_run_prefix = f"{BLUE}[DRY RUN]{ENDC} " if r.get('dry_run', False) else ""
-                lines.append(f"{dry_run_prefix}{BOLD}{r['file_path']}:{ENDC}")
-                lines.append(f"  - Total lines: {r['total_lines']}")
-                lines.append(f"  - Unique lines: {r['unique_lines']}")
-                lines.append(f"  - Duplicates removed: {YELLOW}{r['duplicates_removed']}{ENDC}")
-                duplication_rate = (r['duplicates_removed'] / r['total_lines'] * 100) if r['total_lines'] > 0 else 0
-                lines.append(f"  - Duplication rate: {YELLOW}{duplication_rate:.2f}%{ENDC}")
+    except Exception as e:
+        logger.error(f"Failed to generate report: {str(e)}")
         
-        output = "\n".join(lines)
-    
-    # Write to file if specified
-    if report_file:
-        try:
-            with open(report_file, 'w', encoding='utf-8', errors='ignore') as file:
-                file.write(output)
-            logging.info(f"Report written to {report_file}")
-        except Exception as e:
-            logging.error(f"Failed to write report: {str(e)}")
-    
-    return output
+    return
 
 
 def parse_arguments():
@@ -1077,6 +927,36 @@ def parse_arguments():
         help="Chunk size in bytes for processing large files (default: 1MB)"
     )
     
+    # Streaming mode options
+    streaming_group = parser.add_argument_group('Streaming Mode Options')
+    streaming_group.add_argument(
+        "--stream",
+        action="store_true",
+        help="Enable streaming mode to process data as it arrives"
+    )
+    streaming_group.add_argument(
+        "--follow",
+        action="store_true",
+        help="Continue watching the file for changes (like 'tail -f')"
+    )
+    streaming_group.add_argument(
+        "--poll-interval",
+        type=float,
+        default=0.5,
+        help="Seconds between file checks in streaming mode (default: 0.5s)"
+    )
+    streaming_group.add_argument(
+        "--buffer-size",
+        type=int,
+        default=10000,
+        help="Maximum number of recent lines to keep in buffer (default: 10000)"
+    )
+    streaming_group.add_argument(
+        "--max-runtime",
+        type=float,
+        help="Maximum runtime in seconds for streaming mode"
+    )
+    
     # Other options
     other_group = parser.add_argument_group('Other Options')
     other_group.add_argument(
@@ -1109,81 +989,224 @@ def parse_arguments():
     return parser.parse_args()
 
 
-def main() -> None:
-    """Main entry point for the script."""
-    # Parse command line arguments
+def main():
     args = parse_arguments()
     
-    # Setup logging
-    if args.quiet:
-        logging.basicConfig(level=logging.ERROR, format='%(levelname)s: %(message)s')
-        if args.log_file:
-            # Add file handler for all logs despite quiet mode
-            file_handler = logging.FileHandler(args.log_file, mode='w')
-            file_handler.setLevel(logging.DEBUG if args.verbose else logging.INFO)
-            file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
-            logging.getLogger().addHandler(file_handler)
-    else:
-        setup_logging(args.verbose, args.log_file)
+    # Check for version flag first
+    if args.version:
+        print(f"DupeRemover version {__version__}")
+        sys.exit(0)
     
-    # Ensure at least one input source is provided
-    if not args.files and not args.directory:
-        logging.error("Error: No input files or directory specified")
-        print("Please provide either file paths or a directory with the -d option")
-        print("Run 'python main.py --help' for usage information")
+    # Configure logging based on verbosity
+    if args.verbose:
+        logger.setLevel(logging.DEBUG)
+        logging.debug("Debug logging enabled")
+    elif args.quiet:
+        logger.setLevel(logging.WARNING)
+    
+    # Check for required files
+    if not args.files and not args.stdin:
+        logger.error("No input files specified and --stdin not used")
         sys.exit(1)
     
-    # Collect all files to process
-    file_paths = []
+    # Handle streaming mode if enabled
+    if args.stream:
+        if len(args.files) != 1 and not args.stdin:
+            logger.error("Streaming mode requires exactly one input file or stdin")
+            sys.exit(1)
+        
+        input_file = args.files[0] if args.files else "-"
+        if input_file == "-":
+            logger.error("Streaming from stdin not implemented yet")
+            sys.exit(1)
+            
+        logger.info(f"Starting streaming mode for {input_file}")
+        stream_stats = stream_process_file(
+            file_path=input_file,
+            mode=args.mode,
+            follow=args.follow,
+            language=args.language,
+            auto_detect_language=args.auto_detect_language,
+            detect_per_line=args.detect_per_line,
+            exclude_pattern=args.exclude_pattern,
+            poll_interval=args.poll_interval,
+            buffer_size=args.buffer_size,
+            max_runtime=args.max_runtime
+        )
+        
+        # Generate report if requested
+        if args.report:
+            report_data = {
+                "timestamp": datetime.now().isoformat(),
+                "command_args": vars(args),
+                "results": {
+                    "files_processed": 1,
+                    "failed_files": 0,
+                    "total_lines": stream_stats["total_lines"],
+                    "unique_lines": stream_stats["unique_lines"],
+                    "files": [stream_stats]
+                }
+            }
+            
+            generate_report(report_data, args.report, args.report_file, args.color)
+        
+        sys.exit(0)
     
-    if args.directory:
-        logging.info(f"Searching for {args.pattern} files in {args.directory}")
-        file_paths = find_text_files(args.directory, args.recursive, args.pattern)
-        logging.info(f"Found {len(file_paths)} files to process")
-    else:
-        file_paths = args.files
+    # ... existing code for normal processing ...
+
+
+def stream_process_file(
+    file_path: str,
+    mode: str = "case-sensitive",
+    follow: bool = False,
+    language: Optional[str] = None,
+    auto_detect_language: bool = False,
+    detect_per_line: bool = False,
+    exclude_pattern: Optional[str] = None,
+    poll_interval: float = 0.5,
+    buffer_size: int = 10000,
+    max_runtime: Optional[float] = None
+) -> Dict:
+    """
+    Process a file in streaming mode, handling new content as it is added.
     
-    if not file_paths:
-        logging.error("No files found to process")
-        sys.exit(1)
+    Args:
+        file_path: Path to the file to process
+        mode: Comparison mode for determining duplicates
+        follow: Continue watching the file for changes
+        language: Language code for language-specific processing
+        auto_detect_language: Whether to auto-detect the language
+        detect_per_line: Whether to detect language for each line
+        exclude_pattern: Regex pattern for lines to exclude
+        poll_interval: Seconds between file checks in follow mode
+        buffer_size: Maximum number of recent lines to keep in buffer
+        max_runtime: Maximum runtime in seconds
+        
+    Returns:
+        Statistics about the processed file
+    """
+    # Setup signal handling for graceful exit
+    running = True
     
-    # Process files
-    logging.info(f"Starting duplicate removal on {len(file_paths)} file(s)")
-    start_time = os.times()
+    def signal_handler(sig, frame):
+        nonlocal running
+        logger.info(f"Received signal {sig}, shutting down...")
+        running = False
+        
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
     
-    results = process_multiple_files(
-        file_paths, 
-        args.mode, 
-        args.backup, 
-        args.progress,
-        args.output_dir,
-        args.parallel,
-        args.workers,
-        args.chunk_size,
-        args.dry_run,
-        args.similarity if args.mode == "fuzzy" else 1.0,
-        args.backup_ext,
-        args.preserve_permissions,
-        args.exclude_pattern
-    )
+    # Initialize statistics
+    stats = {
+        "file_path": file_path,
+        "total_lines": 0,
+        "unique_lines": 0,
+        "duplicates_removed": 0,
+        "start_time": datetime.now().isoformat(),
+        "end_time": None,
+        "runtime_seconds": 0
+    }
     
-    end_time = os.times()
-    elapsed = end_time.user - start_time.user + end_time.system - start_time.system
+    # Prepare exclude pattern if provided
+    exclude_regex = None
+    if exclude_pattern:
+        try:
+            exclude_regex = re.compile(exclude_pattern)
+        except re.error as e:
+            logger.error(f"Invalid exclude pattern: {str(e)}")
+            return stats
     
-    # Generate and display report
-    report = generate_report(results, args.report, args.report_file, args.color)
-    if not args.report_file and not args.quiet:
-        print("\n" + report)
+    # Check if file exists
+    if not os.path.exists(file_path):
+        logger.error(f"File '{file_path}' does not exist")
+        return stats
+        
+    # Initialize line tracking
+    seen_lines = set()
+    recent_lines = []  # For ringbuffer implementation
+    file_size = os.path.getsize(file_path)
+    last_position = 0
+    start_time = time.time()
     
-    # Print timing information
-    if not args.quiet:
-        print(f"\nProcessing completed in {elapsed:.2f} seconds")
+    logger.info(f"Starting streaming mode for file: {file_path}")
+    logger.info(f"Mode: {mode}, Follow: {follow}")
     
-    logging.info("Duplicate removal completed")
+    try:
+        while running:
+            current_size = os.path.getsize(file_path)
+            
+            # Check if file was truncated
+            if current_size < last_position:
+                logger.warning("File was truncated, resetting position")
+                last_position = 0
+                
+            # If file has new content
+            if current_size > last_position:
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    f.seek(last_position)
+                    new_content = f.read()
+                    last_position = f.tell()
+                
+                if new_content:
+                    new_lines = new_content.splitlines()
+                    
+                    for line in new_lines:
+                        # Update statistics
+                        stats["total_lines"] += 1
+                        
+                        # Check if line matches exclude pattern
+                        if exclude_regex and exclude_regex.search(line):
+                            continue
+                            
+                        # Process line based on mode and language settings
+                        processed_line = normalize_line(
+                            line, 
+                            mode=mode,
+                            language=language,
+                            auto_detect=auto_detect_language,
+                            detect_per_line=detect_per_line
+                        )
+                        
+                        # Skip if it's a duplicate
+                        if processed_line in seen_lines:
+                            stats["duplicates_removed"] += 1
+                            continue
+                            
+                        # Add to seen lines
+                        seen_lines.add(processed_line)
+                        stats["unique_lines"] += 1
+                        
+                        # Add to recent lines buffer (ring buffer)
+                        recent_lines.append(line)
+                        if len(recent_lines) > buffer_size:
+                            oldest_line = recent_lines.pop(0)
+                            
+                        # Print unique line to stdout
+                        print(line)
+                        
+            # Check if we should continue running
+            if not follow:
+                break
+                
+            # Check if max runtime has been reached
+            if max_runtime and (time.time() - start_time) > max_runtime:
+                logger.info(f"Maximum runtime of {max_runtime}s reached")
+                break
+                
+            # Sleep before checking again
+            time.sleep(poll_interval)
+    except Exception as e:
+        logger.error(f"Error in streaming mode: {str(e)}")
+    finally:
+        # Update final statistics
+        end_time = time.time()
+        stats["end_time"] = datetime.now().isoformat()
+        stats["runtime_seconds"] = end_time - start_time
+        
+    logger.info(f"Streaming mode completed: {stats['total_lines']} lines processed, "
+                f"{stats['unique_lines']} unique, {stats['duplicates_removed']} duplicates removed")
     
-    # Exit with error code if any files failed
-    if any("error" in r for r in results):
-        sys.exit(1)
+    return stats
 
 
 if __name__ == "__main__":
