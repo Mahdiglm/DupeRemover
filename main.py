@@ -13,8 +13,8 @@ import re
 import concurrent.futures
 import hashlib
 import itertools
+import atexit
 from typing import List, Set, Dict, Tuple, Generator, Any, Optional, Union
-from tqdm import tqdm
 from pathlib import Path
 import threading
 import time
@@ -24,7 +24,118 @@ import json
 import csv
 
 # Version information
-__version__ = "2.0.4"
+__version__ = "2.10.0"
+logger = logging.getLogger(__name__)
+
+try:
+    from tqdm import tqdm as _tqdm
+except Exception:
+    _tqdm = None
+
+
+class _DummyTqdm:
+    def __init__(self, iterable=None, **kwargs):
+        self.iterable = iterable
+
+    def update(self, n=1):
+        return
+
+    def close(self):
+        return
+
+    def __iter__(self):
+        return iter(self.iterable or [])
+
+
+def tqdm(iterable=None, **kwargs):
+    if _tqdm is None:
+        if iterable is None:
+            return _DummyTqdm()
+        return iterable
+    return _tqdm(iterable, **kwargs) if iterable is not None else _tqdm(**kwargs)
+
+
+def _enable_ansi() -> None:
+    if os.name == "nt":
+        try:
+            os.system("")
+        except Exception:
+            return
+
+
+class TerminalDashboard:
+    def __init__(self, title: str, file_path: str, mode: str, stream: bool = False):
+        self.title = title
+        self.file_path = file_path
+        self.mode = mode
+        self.stream = stream
+        self.start_time = time.time()
+        self.last_render = 0.0
+        self.lines: List[str] = []
+        self.max_lines = 10
+        self._closed = False
+
+        _enable_ansi()
+        sys.stdout.write("\x1b[?25l")
+        sys.stdout.flush()
+        atexit.register(self.close)
+
+    def push_line(self, line: str) -> None:
+        if not line:
+            return
+        line = line.rstrip("\r\n")
+        self.lines.append(line)
+        if len(self.lines) > self.max_lines:
+            self.lines = self.lines[-self.max_lines :]
+
+    def render(self, stats: Dict[str, Any]) -> None:
+        now = time.time()
+        if now - self.last_render < 0.08:
+            return
+        self.last_render = now
+
+        try:
+            width = os.get_terminal_size().columns
+        except Exception:
+            width = 80
+
+        def _clip(s: str) -> str:
+            if len(s) <= width:
+                return s
+            return s[: max(0, width - 1)] + "…"
+
+        runtime = now - self.start_time
+        total = int(stats.get("total_lines", 0) or 0)
+        unique = int(stats.get("unique_lines", 0) or 0)
+        dup = int(stats.get("duplicates_removed", 0) or 0)
+        rate = (dup / total * 100) if total > 0 else 0.0
+        lps = (total / runtime) if runtime > 0 else 0.0
+
+        out: List[str] = []
+        out.append(_clip(f"DupeRemover {__version__}  |  {self.title}"))
+        out.append(_clip(f"File: {self.file_path}"))
+        out.append(_clip(f"Mode: {self.mode}  |  Runtime: {runtime:.1f}s  |  Lines/s: {lps:.0f}"))
+        out.append(_clip(f"Total: {total}  Unique: {unique}  Duplicates: {dup}  Rate: {rate:.2f}%"))
+        out.append("")
+
+        if self.stream:
+            out.append("Latest unique lines:")
+            if self.lines:
+                out.extend(self.lines[-self.max_lines :])
+            else:
+                out.append("(waiting for new lines...)")
+        else:
+            out.append("Tip: press Ctrl+C to stop")
+
+        sys.stdout.write("\x1b[2J\x1b[H" + "\n".join(_clip(x) for x in out) + "\n")
+        sys.stdout.flush()
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        sys.stdout.write("\x1b[?25h")
+        sys.stdout.flush()
 
 
 def setup_logging(verbose: bool = False, log_file: Optional[str] = None) -> None:
@@ -75,6 +186,8 @@ def chunk_reader(file_path: str, chunk_size: int = 1024*1024) -> Generator[List[
             # If the chunk doesn't end with a newline, the last line is incomplete
             if chunk.endswith('\n'):
                 incomplete_line = ''
+                if lines and lines[-1] == '':
+                    lines.pop()
             else:
                 incomplete_line = lines.pop()
                 
@@ -186,7 +299,8 @@ def remove_duplicates(file_path: str, comparison_mode: str = "case-insensitive",
                       output_file: Optional[str] = None, chunk_size: int = 1024*1024,
                       dry_run: bool = False, similarity_threshold: float = 0.8,
                       backup_extension: str = ".bak", preserve_permissions: bool = False,
-                      exclude_pattern: Optional[str] = None) -> Dict:
+                      exclude_pattern: Optional[str] = None,
+                      dashboard: bool = False) -> Dict:
     """
     Remove duplicate lines from a text file based on specified comparison mode.
     
@@ -293,7 +407,13 @@ def remove_duplicates(file_path: str, comparison_mode: str = "case-insensitive",
         # Initialize tracking variables
         total_lines = 0
         unique_lines = []
-        seen_lines = set()
+        unique_count = 0
+        seen_lines: Set[str] = set()
+        fuzzy_matches: List[str] = []
+
+        dash = None
+        if dashboard:
+            dash = TerminalDashboard("Deduping", file_path, comparison_mode, stream=False)
         
         # Setup progress bar or spinner based on file size
         pbar = None
@@ -305,24 +425,44 @@ def remove_duplicates(file_path: str, comparison_mode: str = "case-insensitive",
                 spinner = Spinner(f"Processing {os.path.basename(file_path)}")
                 spinner.start()
         
-        # Process file in chunks for memory efficiency
+        show_line_progress = show_progress and not dashboard
+
         try:
             for chunk in chunk_reader(file_path, chunk_size):
                 if pbar:
                     pbar.update(len('\n'.join(chunk).encode(encoding, errors='ignore')))
                 
                 # Process this chunk of lines
-                chunk_lines, chunk_seen = process_lines(chunk, comparison_mode, show_progress, similarity_threshold, exclude_pattern)
+                chunk_lines, _ = process_lines(
+                    chunk,
+                    comparison_mode,
+                    show_line_progress,
+                    similarity_threshold,
+                    exclude_pattern,
+                    seen_exact=seen_lines,
+                    fuzzy_matches=fuzzy_matches,
+                )
                 
                 total_lines += len(chunk)
                 unique_lines.extend(chunk_lines)
-                seen_lines.update(chunk_seen)
+                unique_count += len(chunk_lines)
+
+                if dash:
+                    dash.render(
+                        {
+                            "total_lines": total_lines,
+                            "unique_lines": unique_count,
+                            "duplicates_removed": total_lines - unique_count,
+                        }
+                    )
         except Exception as e:
             logging.error(f"Error processing file {file_path}: {str(e)}")
             if pbar:
                 pbar.close()
             if spinner:
                 spinner.stop()
+            if dash:
+                dash.close()
             raise
         
         # Close progress tracking
@@ -330,6 +470,8 @@ def remove_duplicates(file_path: str, comparison_mode: str = "case-insensitive",
             pbar.close()
         if spinner:
             spinner.stop()
+        if dash:
+            dash.close()
         
         # Calculate statistics
         unique_count = len(unique_lines)
@@ -411,6 +553,7 @@ def normalize_line(
     # Handle empty lines
     if not line or line.isspace():
         return ""
+    line = line.rstrip("\r\n")
         
     # Apply normalization based on mode
     if mode == "case-insensitive":
@@ -419,16 +562,16 @@ def normalize_line(
         
     elif mode == "whitespace-insensitive":
         # Remove all whitespace for whitespace-insensitive comparison
-        return re.sub(r'\s+', '', line)
+        return re.sub(r'\s+', '', line).lower()
         
     elif mode == "content-hash":
-        # Generate a hash of the line content
-        import hashlib
-        return hashlib.md5(line.encode('utf-8')).hexdigest()
+        words = re.findall(r"\w+", line.lower())
+        normalized = " ".join(sorted(words)) if words else line.lower()
+        return hashlib.md5(normalized.encode("utf-8")).hexdigest()
         
     elif mode == "alphanumeric-only":
         # Keep only alphanumeric characters
-        return ''.join(c for c in line if c.isalnum())
+        return ''.join(c for c in line.lower() if c.isalnum())
         
     elif mode == "fuzzy":
         # For fuzzy mode, we still need to normalize the line
@@ -456,10 +599,11 @@ def calculate_similarity(str1: str, str2: str) -> float:
     if not set1 and not set2:
         return 1.0
     
+    if not set1 or not set2:
+        return 0.0
     intersection = len(set1.intersection(set2))
-    union = len(set1.union(set2))
-    
-    return intersection / union if union > 0 else 0
+    denom = min(len(set1), len(set2))
+    return intersection / denom if denom > 0 else 0.0
 
 
 def is_fuzzy_duplicate(normalized: str, seen_lines: Set[str], threshold: float) -> bool:
@@ -538,7 +682,9 @@ def is_fuzzy_duplicate(normalized: str, seen_lines: Set[str], threshold: float) 
 
 
 def process_lines(lines: List[str], comparison_mode: str, show_progress: bool, 
-                  similarity_threshold: float = 1.0, exclude_pattern: Optional[str] = None) -> Tuple[List[str], Set[str]]:
+                  similarity_threshold: float = 1.0, exclude_pattern: Optional[str] = None,
+                  seen_exact: Optional[Set[str]] = None,
+                  fuzzy_matches: Optional[List[str]] = None) -> Tuple[List[str], Set[str]]:
     """
     Process the lines from the file to remove duplicates while preserving order.
     
@@ -556,7 +702,8 @@ def process_lines(lines: List[str], comparison_mode: str, show_progress: bool,
     unique_lines = []
     
     # Using a set for exact matches and a list for fuzzy matches to optimize memory usage
-    seen_exact = set()
+    seen_exact = seen_exact if seen_exact is not None else set()
+    fuzzy_matches = fuzzy_matches if fuzzy_matches is not None else []
     
     # Compile regex pattern if provided
     exclude_regex = None
@@ -571,7 +718,6 @@ def process_lines(lines: List[str], comparison_mode: str, show_progress: bool,
     # For very large files with fuzzy matching, we'll use a bloom filter-like approach
     # to reduce memory usage at the cost of a small chance of false positives
     using_fuzzy = comparison_mode == "fuzzy" and similarity_threshold < 1.0
-    fuzzy_matches = []
     
     # Sampling rate for fuzzy matching to improve performance on very large files
     fuzzy_sample_rate = 0.3 if len(lines) > 100000 else 1.0
@@ -664,7 +810,8 @@ def process_multiple_files(file_paths: List[str], comparison_mode: str,
                          similarity_threshold: float = 0.8,
                          backup_extension: str = ".bak",
                          preserve_permissions: bool = False,
-                         exclude_pattern: Optional[str] = None) -> List[Dict]:
+                         exclude_pattern: Optional[str] = None,
+                         dashboard: bool = False) -> List[Dict]:
     """
     Process multiple files and remove duplicates from each.
     
@@ -686,7 +833,7 @@ def process_multiple_files(file_paths: List[str], comparison_mode: str,
     Returns:
         List of statistics dictionaries for each file
     """
-    results = []
+    results: List[Optional[Dict]] = []
     
     if not file_paths:
         logging.warning("No files found to process")
@@ -698,34 +845,77 @@ def process_multiple_files(file_paths: List[str], comparison_mode: str,
         os.makedirs(output_dir, exist_ok=True)
         output_files = {path: os.path.join(output_dir, os.path.basename(path)) for path in file_paths}
     
+    show_file_progress = show_progress and not parallel
+
+    if parallel and len(file_paths) > 1:
+        results = [None] * len(file_paths)
+
+        def _worker(idx: int, fp: str) -> Tuple[int, Dict]:
+            res = remove_duplicates(
+                fp,
+                comparison_mode,
+                create_backup,
+                show_file_progress,
+                output_files[fp] if output_files else None,
+                chunk_size,
+                dry_run,
+                similarity_threshold,
+                backup_extension,
+                preserve_permissions,
+                exclude_pattern,
+                dashboard=dashboard,
+            )
+            return idx, res
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = [executor.submit(_worker, idx, fp) for idx, fp in enumerate(file_paths)]
+            for fut in concurrent.futures.as_completed(futures):
+                try:
+                    idx, res = fut.result()
+                    results[idx] = res
+                except Exception as e:
+                    logging.error(f"Failed to process file in parallel: {str(e)}")
+
+        return [r if r is not None else {"file_path": file_paths[idx], "error": "Unknown error"} for idx, r in enumerate(results)]
+
+    results = []
     for file_path in file_paths:
         try:
             result = remove_duplicates(
-                file_path, comparison_mode, create_backup, show_progress,
-                output_files[file_path] if output_files else None, 1024*1024, dry_run, similarity_threshold, 
-                backup_extension, preserve_permissions, exclude_pattern
+                file_path,
+                comparison_mode,
+                create_backup,
+                show_file_progress,
+                output_files[file_path] if output_files else None,
+                chunk_size,
+                dry_run,
+                similarity_threshold,
+                backup_extension,
+                preserve_permissions,
+                exclude_pattern,
+                dashboard=dashboard,
             )
-            
+
             results.append(result)
-            
-            # Log the results for this file
+
             logging.info(f"Results for {file_path}:")
             logging.info(f"  Original line count: {result['total_lines']}")
             logging.info(f"  Unique lines: {result['unique_lines']}")
             logging.info(f"  Duplicates removed: {result['duplicates_removed']}")
-            
+
         except Exception as e:
             logging.error(f"Failed to process {file_path}: {str(e)}")
             results.append({"file_path": file_path, "error": str(e)})
-    
+
     return results
 
 
 def generate_report(
-    report_data: Dict, 
+    report_data: Union[List[Dict], Dict],
+    report_type: str = "text",
     output_file: Optional[str] = None,
-    report_type: str = "text"
-) -> None:
+    use_color: bool = False,
+) -> str:
     """
     Generate a report of the duplicate removal process.
     
@@ -737,91 +927,258 @@ def generate_report(
     Returns:
         None
     """
-    if not output_file:
-        # Return if no output file is specified
-        logger.debug("No output file specified for report, skipping")
-        return
-        
-    try:
-        # Create directory if it doesn't exist
-        output_dir = os.path.dirname(output_file)
-        if output_dir and not os.path.exists(output_dir):
-            os.makedirs(output_dir, exist_ok=True)
-            
-        # Generate report based on specified type
-        if report_type.lower() == "json":
-            # JSON format
-            with open(output_file, 'w', encoding='utf-8') as f:
-                json.dump(report_data, f, indent=2)
-                
-        elif report_type.lower() == "csv":
-            # CSV format
-            with open(output_file, 'w', newline='', encoding='utf-8') as f:
-                writer = csv.writer(f)
-                # Write header
-                writer.writerow([
-                    "Timestamp", "File", "Total Lines", "Unique Lines", 
-                    "Duplicates Removed", "Duplicate Rate (%)"
-                ])
-                
-                # Write data for each file
-                timestamp = report_data.get("timestamp", datetime.now().isoformat())
-                for file_info in report_data.get("results", {}).get("files", []):
-                    total = file_info.get("total_lines", 0)
-                    unique = file_info.get("unique_lines", 0)
-                    duplicates = file_info.get("duplicates_removed", 0)
-                    
-                    # Calculate duplicate rate
-                    dup_rate = 0
-                    if total > 0:
-                        dup_rate = (duplicates / total) * 100
-                        
-                    writer.writerow([
-                        timestamp,
-                        file_info.get("file_path", "Unknown"),
-                        total,
-                        unique,
-                        duplicates,
-                        f"{dup_rate:.2f}"
-                    ])
-                    
-        else:
-            # Default text format
-            with open(output_file, 'w', encoding='utf-8') as f:
-                f.write(f"DupeRemover Report\n")
-                f.write(f"=================\n\n")
-                f.write(f"Generated: {report_data.get('timestamp', datetime.now().isoformat())}\n\n")
-                
-                # Summary information
-                results = report_data.get("results", {})
-                f.write(f"Summary:\n")
-                f.write(f"  Files Processed: {results.get('files_processed', 0)}\n")
-                f.write(f"  Failed Files: {results.get('failed_files', 0)}\n")
-                f.write(f"  Total Lines: {results.get('total_lines', 0)}\n")
-                f.write(f"  Unique Lines: {results.get('unique_lines', 0)}\n\n")
-                
-                # Details for each file
-                f.write(f"File Details:\n")
-                for file_info in results.get("files", []):
-                    f.write(f"  - {file_info.get('file_path', 'Unknown')}:\n")
-                    f.write(f"    Total Lines: {file_info.get('total_lines', 0)}\n")
-                    f.write(f"    Unique Lines: {file_info.get('unique_lines', 0)}\n")
-                    f.write(f"    Duplicates Removed: {file_info.get('duplicates_removed', 0)}\n")
-                    
-                    # Calculate duplicate rate
-                    total = file_info.get("total_lines", 0)
-                    duplicates = file_info.get("duplicates_removed", 0)
-                    if total > 0:
-                        dup_rate = (duplicates / total) * 100
-                        f.write(f"    Duplicate Rate: {dup_rate:.2f}%\n")
-                    f.write("\n")
-                
-        logger.info(f"Report saved to {output_file}")
-        
-    except Exception as e:
-        logger.error(f"Failed to generate report: {str(e)}")
-        
-    return
+    timestamp = datetime.now().isoformat()
+
+    if isinstance(report_data, dict) and isinstance(report_data.get("results"), dict):
+        timestamp = report_data.get("timestamp", timestamp)
+        files = report_data.get("results", {}).get("files", [])
+    else:
+        files = report_data
+
+    files = files or []
+    total_files = len(files)
+    processed_files = sum(1 for f in files if isinstance(f, dict) and "error" not in f)
+    failed_files = total_files - processed_files
+
+    def _status(file_info: Dict) -> str:
+        if "error" in file_info:
+            return "Error"
+        if file_info.get("dry_run"):
+            return "Dry run"
+        return "Success"
+
+    def _dup_rate(file_info: Dict) -> float:
+        total = file_info.get("total_lines", 0) or 0
+        dup = file_info.get("duplicates_removed", 0) or 0
+        return (dup / total) * 100 if total > 0 else 0.0
+
+    summary = {
+        "files_processed": processed_files,
+        "files_failed": failed_files,
+        "total_files": total_files,
+    }
+
+    rt = (report_type or "text").lower()
+
+    if rt == "json":
+        payload = {
+            "timestamp": timestamp,
+            "summary": summary,
+            "results": files,
+        }
+        report = json.dumps(payload, indent=2)
+    elif rt == "csv":
+        lines = []
+        lines.append("DupeRemover Results")
+        lines.append("")
+        lines.append("SUMMARY")
+        lines.append(f"Files processed,{processed_files}/{total_files}")
+        lines.append(f"Files failed,{failed_files}")
+        lines.append("")
+        lines.append("RESULTS")
+        lines.append("File,Total Lines,Unique Lines,Duplicates Removed,Duplication Rate,Status")
+        for f in files:
+            fp = f.get("file_path", "Unknown") if isinstance(f, dict) else "Unknown"
+            if not isinstance(f, dict):
+                lines.append(f"{fp},,,,,ERROR: Invalid record")
+                continue
+            if "error" in f:
+                lines.append(f"{fp},,,,,ERROR: {f.get('error')}")
+                continue
+            total = f.get("total_lines", 0)
+            unique = f.get("unique_lines", 0)
+            dup = f.get("duplicates_removed", 0)
+            rate = f"{_dup_rate(f):.2f}%"
+            st = _status(f)
+            lines.append(f"{fp},{total},{unique},{dup},{rate},{st}")
+        report = "\n".join(lines)
+    elif rt == "markdown":
+        out = []
+        out.append("# DupeRemover Results")
+        out.append("")
+        out.append(f"- Timestamp: {timestamp}")
+        out.append(f"- Files processed: {processed_files}/{total_files}")
+        out.append(f"- Files failed: {failed_files}")
+        out.append("")
+        out.append("| File | Total Lines | Unique Lines | Duplicates Removed | Duplication Rate | Status |")
+        out.append("|---|---:|---:|---:|---:|---|")
+        for f in files:
+            fp = f.get("file_path", "Unknown") if isinstance(f, dict) else "Unknown"
+            if not isinstance(f, dict):
+                out.append(f"| {fp} |  |  |  |  | Error: invalid record |")
+                continue
+            if "error" in f:
+                out.append(f"| {fp} |  |  |  |  | Error: {f.get('error')} |")
+                continue
+            total = f.get("total_lines", 0)
+            unique = f.get("unique_lines", 0)
+            dup = f.get("duplicates_removed", 0)
+            rate = f"{_dup_rate(f):.2f}%"
+            st = _status(f)
+            out.append(f"| {fp} | {total} | {unique} | {dup} | {rate} | {st} |")
+        report = "\n".join(out).rstrip() + "\n"
+    elif rt == "html":
+        import html
+
+        rows = []
+        for f in files:
+            fp = f.get("file_path", "Unknown") if isinstance(f, dict) else "Unknown"
+            if not isinstance(f, dict):
+                rows.append((fp, "", "", "", "", "Error: invalid record"))
+                continue
+            if "error" in f:
+                rows.append((fp, "", "", "", "", f"Error: {f.get('error')}"))
+                continue
+            total = f.get("total_lines", 0)
+            unique = f.get("unique_lines", 0)
+            dup = f.get("duplicates_removed", 0)
+            rate = f"{_dup_rate(f):.2f}%"
+            st = _status(f)
+            rows.append((fp, str(total), str(unique), str(dup), rate, st))
+
+        report = "\n".join(
+            [
+                "<!doctype html>",
+                "<html><head><meta charset='utf-8' />",
+                "<title>DupeRemover Report</title>",
+                "<style>",
+                "body{font-family:system-ui,Segoe UI,Arial,sans-serif;margin:24px;color:#111}",
+                "h1{margin:0 0 8px 0}",
+                ".meta{margin:0 0 16px 0;color:#444}",
+                "table{border-collapse:collapse;width:100%}",
+                "th,td{border:1px solid #ddd;padding:8px;font-size:14px}",
+                "th{background:#f6f6f6;text-align:left}",
+                "td.num{text-align:right;font-variant-numeric:tabular-nums}",
+                "</style></head><body>",
+                "<h1>DupeRemover Results</h1>",
+                f"<div class='meta'>Timestamp: {html.escape(timestamp)}<br/>Files processed: {processed_files}/{total_files}<br/>Files failed: {failed_files}</div>",
+                "<table>",
+                "<thead><tr><th>File</th><th>Total Lines</th><th>Unique Lines</th><th>Duplicates Removed</th><th>Duplication Rate</th><th>Status</th></tr></thead>",
+                "<tbody>",
+                *[
+                    "<tr>"
+                    f"<td>{html.escape(r[0])}</td>"
+                    f"<td class='num'>{html.escape(r[1])}</td>"
+                    f"<td class='num'>{html.escape(r[2])}</td>"
+                    f"<td class='num'>{html.escape(r[3])}</td>"
+                    f"<td class='num'>{html.escape(r[4])}</td>"
+                    f"<td>{html.escape(r[5])}</td>"
+                    "</tr>"
+                    for r in rows
+                ],
+                "</tbody></table></body></html>",
+            ]
+        )
+    elif rt == "xml":
+        import xml.etree.ElementTree as ET
+
+        root = ET.Element("duperemover_report")
+        ET.SubElement(root, "timestamp").text = timestamp
+        s = ET.SubElement(root, "summary")
+        for k, v in summary.items():
+            ET.SubElement(s, k).text = str(v)
+        res_el = ET.SubElement(root, "results")
+        for f in files:
+            item = ET.SubElement(res_el, "file")
+            if not isinstance(f, dict):
+                ET.SubElement(item, "status").text = "error"
+                ET.SubElement(item, "error").text = "invalid record"
+                continue
+            ET.SubElement(item, "path").text = str(f.get("file_path", "Unknown"))
+            if "error" in f:
+                ET.SubElement(item, "status").text = "error"
+                ET.SubElement(item, "error").text = str(f.get("error"))
+                continue
+            ET.SubElement(item, "status").text = _status(f)
+            ET.SubElement(item, "total_lines").text = str(f.get("total_lines", 0))
+            ET.SubElement(item, "unique_lines").text = str(f.get("unique_lines", 0))
+            ET.SubElement(item, "duplicates_removed").text = str(f.get("duplicates_removed", 0))
+            ET.SubElement(item, "duplication_rate").text = f"{_dup_rate(f):.2f}"
+        report = ET.tostring(root, encoding="unicode")
+    elif rt == "yaml":
+        def _yaml_scalar(x: Any) -> str:
+            if x is None:
+                return "null"
+            if isinstance(x, bool):
+                return "true" if x else "false"
+            if isinstance(x, (int, float)):
+                return str(x)
+            return json.dumps(str(x), ensure_ascii=False)
+
+        def _to_yaml(x: Any, indent: int = 0) -> str:
+            pad = "  " * indent
+            if isinstance(x, dict):
+                lines = []
+                for k, v in x.items():
+                    if isinstance(v, (dict, list)):
+                        lines.append(f"{pad}{k}:")
+                        lines.append(_to_yaml(v, indent + 1))
+                    else:
+                        lines.append(f"{pad}{k}: {_yaml_scalar(v)}")
+                return "\n".join(lines)
+            if isinstance(x, list):
+                lines = []
+                for v in x:
+                    if isinstance(v, (dict, list)):
+                        lines.append(f"{pad}-")
+                        lines.append(_to_yaml(v, indent + 1))
+                    else:
+                        lines.append(f"{pad}- {_yaml_scalar(v)}")
+                return "\n".join(lines)
+            return f"{pad}{_yaml_scalar(x)}"
+
+        payload = {
+            "timestamp": timestamp,
+            "summary": summary,
+            "results": files,
+        }
+        report = _to_yaml(payload).rstrip() + "\n"
+    else:
+        reset = "\033[0m" if use_color else ""
+        bold = "\033[1m" if use_color else ""
+        green = "\033[92m" if use_color else ""
+        yellow = "\033[93m" if use_color else ""
+        red = "\033[91m" if use_color else ""
+
+        out: List[str] = []
+        out.append(f"{bold}=== DupeRemover Results ==={reset}")
+        out.append(f"Timestamp: {timestamp}")
+        out.append(f"Files processed: {processed_files}/{total_files}")
+        out.append(f"Files failed: {failed_files}")
+        out.append("")
+
+        for f in files:
+            if not isinstance(f, dict):
+                out.append(f"{red}[ERROR]{reset} Invalid record")
+                continue
+            fp = f.get("file_path", "Unknown")
+            if "error" in f:
+                out.append(f"{red}[ERROR]{reset} {fp}: {f.get('error')}")
+                continue
+
+            st = _status(f)
+            st_color = green if st == "Success" else yellow
+            out.append(f"{st_color}[{st.upper()}]{reset} {fp}")
+            out.append(f"  Total lines: {f.get('total_lines', 0)}")
+            out.append(f"  Unique lines: {f.get('unique_lines', 0)}")
+            out.append(f"  Duplicates removed: {f.get('duplicates_removed', 0)}")
+            out.append(f"  Duplication rate: {_dup_rate(f):.2f}%")
+            out.append("")
+
+        report = "\n".join(out).rstrip() + "\n"
+
+    if output_file:
+        try:
+            output_dir = os.path.dirname(output_file)
+            if output_dir and not os.path.exists(output_dir):
+                os.makedirs(output_dir, exist_ok=True)
+            with open(output_file, "w", encoding="utf-8", newline="") as f:
+                f.write(report)
+            logger.info(f"Report saved to {output_file}")
+        except Exception as e:
+            logger.error(f"Failed to write report: {str(e)}")
+
+    return report
 
 
 def parse_arguments():
@@ -852,6 +1209,11 @@ def parse_arguments():
         "--pattern",
         default="*.txt",
         help="File pattern to match when using --directory (default: *.txt)"
+    )
+    input_group.add_argument(
+        "--stdin",
+        action="store_true",
+        help="Read input from stdin"
     )
     
     # Comparison options
@@ -959,6 +1321,25 @@ def parse_arguments():
         type=float,
         help="Maximum runtime in seconds for streaming mode"
     )
+    streaming_group.add_argument(
+        "--language",
+        help="Language code for language-specific processing"
+    )
+    streaming_group.add_argument(
+        "--auto-detect-language",
+        action="store_true",
+        help="Auto-detect language"
+    )
+    streaming_group.add_argument(
+        "--detect-per-line",
+        action="store_true",
+        help="Detect language per line"
+    )
+
+    streaming_group.add_argument(
+        "--stream-output",
+        help="Write unique lines to this file in streaming mode (instead of printing)"
+    )
     
     # Other options
     other_group = parser.add_argument_group('Other Options')
@@ -972,6 +1353,11 @@ def parse_arguments():
         help="Enable verbose logging"
     )
     other_group.add_argument(
+        "--version",
+        action="store_true",
+        help="Show version and exit"
+    )
+    other_group.add_argument(
         "--dry-run",
         action="store_true",
         help="Show what would be done without making changes"
@@ -981,6 +1367,12 @@ def parse_arguments():
         "--color",
         action="store_true",
         help="Enable colored output in text reports"
+    )
+
+    other_group.add_argument(
+        "--dashboard",
+        action="store_true",
+        help="Show a live terminal dashboard while processing"
     )
     
     other_group.add_argument(
@@ -994,6 +1386,8 @@ def parse_arguments():
 
 def main():
     args = parse_arguments()
+
+    setup_logging(args.verbose, args.log_file)
     
     # Check for version flag first
     if args.version:
@@ -1008,7 +1402,7 @@ def main():
         logger.setLevel(logging.WARNING)
     
     # Check for required files
-    if not args.files and not args.stdin:
+    if not args.files and not args.directory and not args.stdin:
         logger.error("No input files specified and --stdin not used")
         sys.exit(1)
     
@@ -1034,7 +1428,9 @@ def main():
             exclude_pattern=args.exclude_pattern,
             poll_interval=args.poll_interval,
             buffer_size=args.buffer_size,
-            max_runtime=args.max_runtime
+            max_runtime=args.max_runtime,
+            dashboard=args.dashboard,
+            stream_output=args.stream_output,
         )
         
         # Generate report if requested
@@ -1050,12 +1446,69 @@ def main():
                     "files": [stream_stats]
                 }
             }
-            
-            generate_report(report_data, args.report, args.report_file, args.color)
+
+            report = generate_report(report_data, report_type=args.report, output_file=args.report_file, use_color=args.color)
+            if not args.report_file:
+                print(report, end="")
         
         sys.exit(0)
     
-    # ... existing code for normal processing ...
+    file_paths: List[str] = []
+    if args.directory:
+        file_paths = find_text_files(args.directory, args.recursive, args.pattern)
+    else:
+        file_paths = list(args.files or [])
+
+    results: List[Dict] = []
+
+    if args.stdin:
+        stdin_text = sys.stdin.read()
+        stdin_lines = stdin_text.splitlines(True)
+        unique_lines, _ = process_lines(
+            stdin_lines,
+            args.mode,
+            show_progress=False,
+            similarity_threshold=args.similarity,
+            exclude_pattern=args.exclude_pattern,
+        )
+        stats = {
+            "total_lines": len(stdin_lines),
+            "unique_lines": len(unique_lines),
+            "duplicates_removed": len(stdin_lines) - len(unique_lines),
+            "file_path": "-",
+            "dry_run": args.dry_run,
+        }
+        results.append(stats)
+        if not args.dry_run:
+            sys.stdout.writelines(unique_lines)
+
+    if file_paths:
+        parallel = args.parallel and not args.dashboard
+        results.extend(
+            process_multiple_files(
+                file_paths=file_paths,
+                comparison_mode=args.mode,
+                create_backup=args.backup,
+                show_progress=args.progress and not args.dashboard,
+                output_dir=args.output_dir,
+                parallel=parallel,
+                max_workers=args.workers,
+                chunk_size=args.chunk_size,
+                dry_run=args.dry_run,
+                similarity_threshold=args.similarity,
+                backup_extension=args.backup_ext,
+                preserve_permissions=args.preserve_permissions,
+                exclude_pattern=args.exclude_pattern,
+                dashboard=args.dashboard,
+            )
+        )
+
+    if args.report:
+        report = generate_report(results, report_type=args.report, output_file=args.report_file, use_color=args.color)
+        if not args.report_file:
+            print(report, end="")
+
+    sys.exit(0)
 
 
 def stream_process_file(
@@ -1068,7 +1521,9 @@ def stream_process_file(
     exclude_pattern: Optional[str] = None,
     poll_interval: float = 0.5,
     buffer_size: int = 10000,
-    max_runtime: Optional[float] = None
+    max_runtime: Optional[float] = None,
+    dashboard: bool = False,
+    stream_output: Optional[str] = None,
 ) -> Dict:
     """
     Process a file in streaming mode, handling new content as it is added.
@@ -1130,6 +1585,14 @@ def stream_process_file(
     file_size = os.path.getsize(file_path)
     last_position = 0
     start_time = time.time()
+
+    dash = TerminalDashboard("Streaming", file_path, mode, stream=True) if dashboard else None
+    out_f = None
+    if stream_output:
+        out_dir = os.path.dirname(stream_output)
+        if out_dir:
+            os.makedirs(out_dir, exist_ok=True)
+        out_f = open(stream_output, "a", encoding="utf-8", newline="")
     
     logger.info(f"Starting streaming mode for file: {file_path}")
     logger.info(f"Mode: {mode}, Follow: {follow}")
@@ -1151,7 +1614,7 @@ def stream_process_file(
                     last_position = f.tell()
                 
                 if new_content:
-                    new_lines = new_content.splitlines()
+                    new_lines = new_content.splitlines(True)
                     
                     for line in new_lines:
                         # Update statistics
@@ -1184,8 +1647,14 @@ def stream_process_file(
                         if len(recent_lines) > buffer_size:
                             oldest_line = recent_lines.pop(0)
                             
-                        # Print unique line to stdout
-                        print(line)
+                        if dash:
+                            dash.push_line(line)
+                            dash.render(stats)
+                        elif out_f:
+                            out_f.write(line if line.endswith("\n") else line + "\n")
+                            out_f.flush()
+                        else:
+                            print(line, end="" if line.endswith("\n") else "\n")
                         
             # Check if we should continue running
             if not follow:
@@ -1201,6 +1670,14 @@ def stream_process_file(
     except Exception as e:
         logger.error(f"Error in streaming mode: {str(e)}")
     finally:
+        if out_f:
+            try:
+                out_f.close()
+            except Exception:
+                pass
+        if dash:
+            dash.render(stats)
+            dash.close()
         # Update final statistics
         end_time = time.time()
         stats["end_time"] = datetime.now().isoformat()

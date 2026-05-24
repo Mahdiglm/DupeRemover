@@ -1,13 +1,13 @@
 <div align="center">
 
-# Pattern Exclusion Update v2.0.4
+# Live Dashboard Update v2.10.0
 
-  <img src="https://img.shields.io/badge/pattern-exclusion-brightgreen" alt="Pattern exclusion"/>
-  <img src="https://img.shields.io/badge/streaming-enhanced-blue" alt="Streaming enhanced"/>
-  <img src="https://img.shields.io/badge/performance-improved-orange" alt="Performance improved"/>
+  <img src="https://img.shields.io/badge/live-dashboard-brightgreen" alt="Live dashboard"/>
+  <img src="https://img.shields.io/badge/streaming-upgraded-blue" alt="Streaming upgraded"/>
+  <img src="https://img.shields.io/badge/reports-complete-orange" alt="Reports complete"/>
 
 <div style="border-left: 4px solid #5cb85c; padding-left: 15px; margin: 20px 0; color: #333;">
-  This update introduces powerful pattern exclusion capabilities, allowing you to preserve specific lines from deduplication while enhancing streaming performance.
+  This update adds a full-screen live terminal dashboard and improved streaming output control, plus completes the report formats advertised by the CLI.
 </div>
 
 ## New Features
@@ -15,37 +15,40 @@
 <table>
   <tr>
     <td width="40" align="center"><strong>✓</strong></td>
-    <td><strong>Exclude Pattern</strong>: Preserve lines matching regex patterns (<code>--exclude-pattern</code>)</td>
+    <td><strong>Live Dashboard</strong>: Full-screen live view with speed, totals, and duplication rate (<code>--dashboard</code>)</td>
   </tr>
   <tr>
     <td width="40" align="center"><strong>✓</strong></td>
-    <td>Enhanced streaming mode with pattern exclusion support</td>
+    <td>Streaming dashboard shows latest unique lines in real time (<code>--stream --follow --dashboard</code>)</td>
   </tr>
   <tr>
     <td width="40" align="center"><strong>✓</strong></td>
-    <td>Optimized regex pattern compilation and caching for better performance</td>
+    <td><strong>Stream Output Target</strong>: Write unique streamed lines to a file (<code>--stream-output</code>)</td>
   </tr>
   <tr>
     <td width="40" align="center"><strong>✓</strong></td>
-    <td>Improved memory management for large files with pattern exclusion</td>
+    <td><strong>Report Formats Completed</strong>: Fully implemented <code>text</code>, <code>json</code>, <code>csv</code>, <code>html</code>, <code>xml</code>, <code>yaml</code>, <code>markdown</code></td>
   </tr>
   <tr>
     <td width="40" align="center"><strong>✓</strong></td>
-    <td>Comprehensive examples and documentation for pattern usage</td>
+    <td>Optional progress UI fallback when <code>tqdm</code> is not installed (runs without crashing)</td>
   </tr>
 </table>
 
 ## Usage Examples
 
 ```bash
-# Exclude lines beginning with timestamps
-python main.py logs.txt --exclude-pattern "^[0-9]{4}-[0-9]{2}-[0-9]{2}"
+# Show a full-screen live dashboard while processing a big file
+python main.py large_file.txt --dashboard
 
-# Preserve lines with log levels
-python main.py data.txt --exclude-pattern "WARNING|ERROR|CRITICAL"
+# Real-time log cleaning with a live dashboard
+python main.py server.log --stream --follow --dashboard
 
-# Keep configuration comments
-python main.py config.txt --exclude-pattern "^#.*$"
+# Save unique streamed lines to a file instead of stdout
+python main.py server.log --stream --follow --stream-output unique.log
+
+# Generate a quick HTML report
+python main.py logs.txt --report html --report-file report.html
 ```
 
 ## Bug Fixes
@@ -53,19 +56,19 @@ python main.py config.txt --exclude-pattern "^#.*$"
 <table>
   <tr>
     <td width="40" align="center"><strong>✓</strong></td>
-    <td>Fixed indentation issues in try-except blocks</td>
+    <td>Fixed cross-chunk deduplication so duplicates spanning chunk boundaries are removed correctly</td>
   </tr>
   <tr>
     <td width="40" align="center"><strong>✓</strong></td>
-    <td>Corrected memory leak with certain pattern combinations</td>
+    <td>Fixed multiple CLI/runtime crashes caused by missing flags and report function mismatches</td>
   </tr>
   <tr>
     <td width="40" align="center"><strong>✓</strong></td>
-    <td>Improved error handling for malformed regex patterns</td>
+    <td>Hardened report generation when some processed files return error records</td>
   </tr>
   <tr>
     <td width="40" align="center"><strong>✓</strong></td>
-    <td>Fixed edge case with empty line processing</td>
+    <td>Improved streaming output behavior (proper newlines and optional file output)</td>
   </tr>
 </table>
 
@@ -74,15 +77,15 @@ python main.py config.txt --exclude-pattern "^#.*$"
 <table>
   <tr>
     <td width="40" align="center"><strong>!</strong></td>
-    <td>Complex regex patterns may impact performance on very large files</td>
+    <td>Full-screen dashboard uses ANSI escape sequences; some terminals may render it imperfectly</td>
   </tr>
   <tr>
     <td width="40" align="center"><strong>!</strong></td>
-    <td>Pattern matching occurs before fuzzy matching in fuzzy mode</td>
+    <td>When <code>--dashboard</code> is enabled, per-line progress indicators are suppressed for a cleaner UI</td>
   </tr>
   <tr>
     <td width="40" align="center"><strong>!</strong></td>
-    <td>UTF-16 encoded files may require special handling with certain patterns</td>
+    <td>Very high-velocity log files may require tuning <code>--poll-interval</code> and using <code>--stream-output</code></td>
   </tr>
 </table>
 

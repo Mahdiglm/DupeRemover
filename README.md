@@ -8,7 +8,7 @@
 
   <!-- BADGES -->
   <p align="center">
-    <a href="https://github.com/Mahdiglm/DupeRemover/releases"><img src="https://img.shields.io/badge/version-2.0.4-brightgreen.svg?style=for-the-badge" alt="Version"></a>
+    <a href="https://github.com/Mahdiglm/DupeRemover/releases"><img src="https://img.shields.io/badge/version-2.10.0-brightgreen.svg?style=for-the-badge" alt="Version"></a>
     <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.6+-blue.svg?style=for-the-badge&logo=python&logoColor=white" alt="Python"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge" alt="License"></a>
     <a href="#project-status"><img src="https://img.shields.io/badge/status-maintenance-yellow.svg?style=for-the-badge" alt="Status"></a>
@@ -239,6 +239,9 @@ python main.py your_file.txt --exclude-pattern "^IMPORTANT:"
 # Parallel processing with custom worker count
 python main.py *.txt --parallel --workers 4
 
+# Live terminal dashboard (great for large files)
+python main.py large_file.txt --dashboard
+
 # Processing large files with custom chunk size (2MB)
 python main.py large_file.txt --chunk-size 2097152
 ```
@@ -253,6 +256,12 @@ python main.py server.log --stream --follow
 
 # Stream with a 1-second polling interval
 python main.py app.log --stream --follow --poll-interval 1.0
+
+# Streaming dashboard (shows live stats + latest unique lines)
+python main.py server.log --stream --follow --dashboard
+
+# Save unique streamed lines to a file
+python main.py server.log --stream --follow --stream-output unique.log
 
 # Stream for a maximum of 3600 seconds (1 hour)
 python main.py system.log --stream --follow --max-runtime 3600
@@ -270,6 +279,7 @@ python main.py access.log --stream --follow --buffer-size 5000
 | `--poll-interval` | Seconds between file checks in follow mode       | 0.5     |
 | `--buffer-size`   | Maximum number of recent lines to keep in buffer | 10000   |
 | `--max-runtime`   | Maximum runtime in seconds                       | None    |
+| `--stream-output` | Write unique lines to a file (no stdout)         | None    |
 
 ### Output Options
 

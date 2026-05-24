@@ -7,11 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 > **Note:** Version 2.0.0 is the final planned major release. The project is now in maintenance mode, accepting only bug fixes and minor improvements.
 
-## [2.1.0] - Unreleased
+## [Unreleased]
 
 ### Added
 
 - TBD
+
+## [2.10.0] - 2026-05-25
+
+### Added
+
+- **Live Terminal Dashboard**: New `--dashboard` option shows a full-screen live view of progress, speed, and duplication rate while processing files
+  - Works in both normal mode and streaming mode
+  - Shows the latest unique lines in streaming mode
+  - Ideal for large log files where you want real-time feedback
+  - Usage examples:
+    - `python main.py large_file.txt --dashboard`
+    - `python main.py server.log --stream --follow --dashboard`
+- **Streaming Output Target**: New `--stream-output` option writes unique streamed lines to a file instead of printing to stdout
+  - Useful when chaining tools or when you want a clean output artifact
+  - Usage example:
+    - `python main.py server.log --stream --follow --stream-output unique.log`
+- **Report Format Completion**: All report formats advertised by the CLI are now implemented in `generate_report()`
+  - `text`, `json`, `csv`, `html`, `xml`, `yaml`, `markdown`
+
+### Fixed
+
+- Cross-chunk deduplication correctness (duplicates spanning chunk boundaries are now detected and removed)
+- Multiple CLI/runtime crashes caused by missing CLI flags and report function mismatches
+- Report generation robustness when some files fail and return error records
+
+### Changed
+
+- `generate_report()` now returns the report content as a string (and optionally writes to `--report-file`)
+- Progress UI behavior: when `--dashboard` is enabled, per-line progress indicators are suppressed for a cleaner display
 
 ## [2.0.4] - 2025-07-25
 
