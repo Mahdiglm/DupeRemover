@@ -1,13 +1,13 @@
 <div align="center">
 
-# Live Dashboard Update v2.10.0
+# GUI + PyInstaller Update v2.11.0
 
-  <img src="https://img.shields.io/badge/live-dashboard-brightgreen" alt="Live dashboard"/>
-  <img src="https://img.shields.io/badge/streaming-upgraded-blue" alt="Streaming upgraded"/>
-  <img src="https://img.shields.io/badge/reports-complete-orange" alt="Reports complete"/>
+  <img src="https://img.shields.io/badge/pyside6-gui-brightgreen" alt="PySide6 GUI"/>
+  <img src="https://img.shields.io/badge/pyinstaller-ready-blue" alt="PyInstaller ready"/>
+  <img src="https://img.shields.io/badge/windows-exe-orange" alt="Windows exe"/>
 
 <div style="border-left: 4px solid #5cb85c; padding-left: 15px; margin: 20px 0; color: #333;">
-  This update adds a full-screen live terminal dashboard and improved streaming output control, plus completes the report formats advertised by the CLI.
+  This update introduces a full PySide6 GUI (batch + streaming), adds a GUI/CLI launcher entrypoint, and includes PyInstaller support for building a Windows executable.
 </div>
 
 ## New Features
@@ -15,39 +15,45 @@
 <table>
   <tr>
     <td width="40" align="center"><strong>✓</strong></td>
-    <td><strong>Live Dashboard</strong>: Full-screen live view with speed, totals, and duplication rate (<code>--dashboard</code>)</td>
+    <td><strong>PySide6 GUI</strong>: New graphical interface with Batch and Streaming tabs (<code>pyside_gui.py</code>)</td>
   </tr>
   <tr>
     <td width="40" align="center"><strong>✓</strong></td>
-    <td>Streaming dashboard shows latest unique lines in real time (<code>--stream --follow --dashboard</code>)</td>
+    <td><strong>GUI/CLI Launcher</strong>: New <code>app.py</code> entrypoint lets you choose GUI or classic CLI at startup (CLI fallback if PySide6 is not available)</td>
   </tr>
   <tr>
     <td width="40" align="center"><strong>✓</strong></td>
-    <td><strong>Stream Output Target</strong>: Write unique streamed lines to a file (<code>--stream-output</code>)</td>
+    <td><strong>PyInstaller Support</strong>: Added <code>duperemover.spec</code> and <code>build_exe.ps1</code> to build a Windows executable (includes PySide6 hidden imports)</td>
   </tr>
   <tr>
     <td width="40" align="center"><strong>✓</strong></td>
-    <td><strong>Report Formats Completed</strong>: Fully implemented <code>text</code>, <code>json</code>, <code>csv</code>, <code>html</code>, <code>xml</code>, <code>yaml</code>, <code>markdown</code></td>
+    <td><strong>Dependencies File</strong>: Added <code>requirements.txt</code> including PySide6 + PyInstaller</td>
   </tr>
   <tr>
     <td width="40" align="center"><strong>✓</strong></td>
-    <td>Optional progress UI fallback when <code>tqdm</code> is not installed (runs without crashing)</td>
+    <td><strong>Test Suite</strong>: Added unit tests for core deduplication and reporting (<code>test_duplicate_remover.py</code>)</td>
   </tr>
 </table>
 
 ## Usage Examples
 
 ```bash
-# Show a full-screen live dashboard while processing a big file
+# Launch and choose GUI or CLI
+python app.py
+
+# Build a Windows executable (PowerShell)
+powershell -ExecutionPolicy Bypass -File build_exe.ps1
+
+# CLI: show a full-screen live dashboard while processing a big file
 python main.py large_file.txt --dashboard
 
-# Real-time log cleaning with a live dashboard
+# CLI: real-time log cleaning with a live dashboard
 python main.py server.log --stream --follow --dashboard
 
-# Save unique streamed lines to a file instead of stdout
+# CLI: save unique streamed lines to a file instead of stdout
 python main.py server.log --stream --follow --stream-output unique.log
 
-# Generate a quick HTML report
+# CLI: generate a quick HTML report
 python main.py logs.txt --report html --report-file report.html
 ```
 
@@ -56,25 +62,17 @@ python main.py logs.txt --report html --report-file report.html
 <table>
   <tr>
     <td width="40" align="center"><strong>✓</strong></td>
-    <td>Fixed cross-chunk deduplication so duplicates spanning chunk boundaries are removed correctly</td>
-  </tr>
-  <tr>
-    <td width="40" align="center"><strong>✓</strong></td>
-    <td>Fixed multiple CLI/runtime crashes caused by missing flags and report function mismatches</td>
-  </tr>
-  <tr>
-    <td width="40" align="center"><strong>✓</strong></td>
-    <td>Hardened report generation when some processed files return error records</td>
-  </tr>
-  <tr>
-    <td width="40" align="center"><strong>✓</strong></td>
-    <td>Improved streaming output behavior (proper newlines and optional file output)</td>
+    <td>Version and release metadata updated to match v2.11.0 (CLI + docs + GUI title)</td>
   </tr>
 </table>
 
 ## Known Limitations
 
 <table>
+  <tr>
+    <td width="40" align="center"><strong>!</strong></td>
+    <td>PyInstaller build uses <code>console=True</code> (the executable opens with a console window)</td>
+  </tr>
   <tr>
     <td width="40" align="center"><strong>!</strong></td>
     <td>Full-screen dashboard uses ANSI escape sequences; some terminals may render it imperfectly</td>

@@ -8,7 +8,7 @@
 
   <!-- BADGES -->
   <p align="center">
-    <a href="https://github.com/Mahdiglm/DupeRemover/releases"><img src="https://img.shields.io/badge/version-2.10.0-brightgreen.svg?style=for-the-badge" alt="Version"></a>
+    <a href="https://github.com/Mahdiglm/DupeRemover/releases"><img src="https://img.shields.io/badge/version-2.11.0-brightgreen.svg?style=for-the-badge" alt="Version"></a>
     <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.6+-blue.svg?style=for-the-badge&logo=python&logoColor=white" alt="Python"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge" alt="License"></a>
     <a href="#project-status"><img src="https://img.shields.io/badge/status-maintenance-yellow.svg?style=for-the-badge" alt="Status"></a>
@@ -171,7 +171,7 @@ DupeRemover helps you eliminate duplicate content from text files while providin
 ### Prerequisites
 
 - Python 3.6 or higher
-- tqdm library
+- Install dependencies via requirements.txt
 
 ### Quick Setup
 
@@ -183,7 +183,7 @@ git clone https://github.com/Mahdiglm/DupeRemover.git
 cd DupeRemover
 
 # Install required dependency
-pip install tqdm
+pip install -r requirements.txt
 ```
 
 ## Quick Start
@@ -204,6 +204,18 @@ python main.py file1.txt file2.txt file3.txt
 
 ```bash
 python main.py -d your_directory/
+```
+
+### Launch GUI (Recommended)
+
+```bash
+python app.py
+```
+
+## Build Windows .exe
+
+```bash
+.\build_exe.ps1
 ```
 
 ## Usage Guide

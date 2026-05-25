@@ -13,6 +13,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - TBD
 
+## [2.11.0] - 2026-05-25
+
+### Added
+
+- **PySide6 GUI**: New graphical interface for DupeRemover via `pyside_gui.py`
+  - Batch tab supports multi-file and directory workflows with the core comparison modes, output options, and report generation
+  - Streaming tab supports real-time deduplication with follow mode, buffer sizing, optional output file, and live log view
+- **GUI/CLI Launcher**: New `app.py` entrypoint that lets users choose GUI or CLI at startup (falls back to CLI when PySide6 is unavailable)
+- **PyInstaller Support**: Added `duperemover.spec` and `build_exe.ps1` for building a Windows executable (including PySide6 hidden imports)
+- **Dependencies File**: Added `requirements.txt` (includes `PySide6` and `pyinstaller` alongside existing CLI dependencies)
+- **Test Suite**: Added `test_duplicate_remover.py` unit tests covering normalization, fuzzy matching, file processing, and report generation
+
+### Changed
+
+- Version bump to 2.11.0 and documentation alignment (README badge, release notes)
+
 ## [2.10.0] - 2026-05-25
 
 ### Added

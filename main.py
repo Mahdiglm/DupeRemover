@@ -1,7 +1,7 @@
 """
 duplicate_remover.py - Removes duplicates from text files with various comparison options.
 Supports multiple files, progress tracking, and backup creation.
-Version 2.0.4 - Stable release with exclude pattern functionality.
+Version 2.11.0 - PySide6 GUI + PyInstaller packaging update.
 """
 
 import os
@@ -24,13 +24,38 @@ import json
 import csv
 
 # Version information
-__version__ = "2.10.0"
+__version__ = "2.11.0"
 logger = logging.getLogger(__name__)
 
 try:
     from tqdm import tqdm as _tqdm
 except Exception:
     _tqdm = None
+
+try:
+    from alive_progress import alive_bar as _alive_bar
+except Exception:
+    _alive_bar = None
+
+
+class _DummyAliveBar:
+    def __init__(self, total: Optional[int] = None, **kwargs):
+        self.total = total
+
+    def __enter__(self):
+        def _tick(n: int = 1):
+            return
+
+        return _tick
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+
+def alive_bar(total: Optional[int] = None, **kwargs):
+    if _alive_bar is None:
+        return _DummyAliveBar(total, **kwargs)
+    return _alive_bar(total, **kwargs)
 
 
 class _DummyTqdm:
@@ -63,12 +88,45 @@ def _enable_ansi() -> None:
             return
 
 
+def _isatty(stream) -> bool:
+    try:
+        return bool(stream) and hasattr(stream, "isatty") and stream.isatty()
+    except Exception:
+        return False
+
+
+def _ansi(code: str, text: str, enabled: bool) -> str:
+    if not enabled:
+        return text
+    return f"\x1b[{code}m{text}\x1b[0m"
+
+
+class _ColorFormatter(logging.Formatter):
+    def __init__(self, use_color: bool):
+        super().__init__("%(asctime)s - %(levelname)s - %(message)s", "%Y-%m-%d %H:%M:%S")
+        self.use_color = use_color
+
+    def format(self, record: logging.LogRecord) -> str:
+        msg = super().format(record)
+        if not self.use_color:
+            return msg
+        level = record.levelno
+        if level >= logging.ERROR:
+            return _ansi("91", msg, True)
+        if level >= logging.WARNING:
+            return _ansi("93", msg, True)
+        if level >= logging.INFO:
+            return _ansi("92", msg, True)
+        return _ansi("90", msg, True)
+
+
 class TerminalDashboard:
-    def __init__(self, title: str, file_path: str, mode: str, stream: bool = False):
+    def __init__(self, title: str, file_path: str, mode: str, stream: bool = False, use_color: bool = True):
         self.title = title
         self.file_path = file_path
         self.mode = mode
         self.stream = stream
+        self.use_color = use_color and _isatty(sys.stdout)
         self.start_time = time.time()
         self.last_render = 0.0
         self.lines: List[str] = []
@@ -111,21 +169,32 @@ class TerminalDashboard:
         rate = (dup / total * 100) if total > 0 else 0.0
         lps = (total / runtime) if runtime > 0 else 0.0
 
+        title = _ansi("96;1", f"DupeRemover {__version__}", self.use_color)
+        subtitle = _ansi("90", f" |  {self.title}", self.use_color)
+        file_label = _ansi("90", "File:", self.use_color)
+        mode_label = _ansi("90", "Mode:", self.use_color)
+        total_label = _ansi("90", "Total:", self.use_color)
+        unique_label = _ansi("90", "Unique:", self.use_color)
+        dup_label = _ansi("90", "Duplicates:", self.use_color)
+        rate_label = _ansi("90", "Rate:", self.use_color)
+        unique_val = _ansi("92;1", str(unique), self.use_color)
+        dup_val = _ansi("91;1", str(dup), self.use_color)
+
         out: List[str] = []
-        out.append(_clip(f"DupeRemover {__version__}  |  {self.title}"))
-        out.append(_clip(f"File: {self.file_path}"))
-        out.append(_clip(f"Mode: {self.mode}  |  Runtime: {runtime:.1f}s  |  Lines/s: {lps:.0f}"))
-        out.append(_clip(f"Total: {total}  Unique: {unique}  Duplicates: {dup}  Rate: {rate:.2f}%"))
+        out.append(_clip(f"{title}{subtitle}"))
+        out.append(_clip(f"{file_label} {self.file_path}"))
+        out.append(_clip(f"{mode_label} {self.mode}  |  Runtime: {runtime:.1f}s  |  Lines/s: {lps:.0f}"))
+        out.append(_clip(f"{total_label} {total}  {unique_label} {unique_val}  {dup_label} {dup_val}  {rate_label} {rate:.2f}%"))
         out.append("")
 
         if self.stream:
-            out.append("Latest unique lines:")
+            out.append(_ansi("90", "Latest unique lines:", self.use_color))
             if self.lines:
                 out.extend(self.lines[-self.max_lines :])
             else:
-                out.append("(waiting for new lines...)")
+                out.append(_ansi("90", "(waiting for new lines...)", self.use_color))
         else:
-            out.append("Tip: press Ctrl+C to stop")
+            out.append(_ansi("90", "Tip: press Ctrl+C to stop", self.use_color))
 
         sys.stdout.write("\x1b[2J\x1b[H" + "\n".join(_clip(x) for x in out) + "\n")
         sys.stdout.flush()
@@ -138,28 +207,26 @@ class TerminalDashboard:
         sys.stdout.flush()
 
 
-def setup_logging(verbose: bool = False, log_file: Optional[str] = None) -> None:
-    """Configure the logging system."""
-    handlers = []
-    
-    # Console handler
+def setup_logging(verbose: bool = False, log_file: Optional[str] = None, use_color: bool = True) -> None:
+    handlers: List[logging.Handler] = []
+
     console_handler = logging.StreamHandler()
+    console_handler.setFormatter(_ColorFormatter(use_color and _isatty(console_handler.stream)))
     handlers.append(console_handler)
-    
-    # File handler if specified
+
     if log_file:
         try:
-            file_handler = logging.FileHandler(log_file, mode='w')
+            file_handler = logging.FileHandler(log_file, mode="w")
+            file_handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s", "%Y-%m-%d %H:%M:%S"))
             handlers.append(file_handler)
         except Exception as e:
             print(f"Warning: Could not create log file: {e}")
-    
-    logging.basicConfig(
-        level=logging.DEBUG if verbose else logging.INFO,
-        format='%(asctime)s - %(levelname)s - %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S',
-        handlers=handlers
-    )
+
+    root = logging.getLogger()
+    root.handlers = []
+    for h in handlers:
+        root.addHandler(h)
+    root.setLevel(logging.DEBUG if verbose else logging.INFO)
 
 
 def chunk_reader(file_path: str, chunk_size: int = 1024*1024) -> Generator[List[str], None, None]:
@@ -417,10 +484,16 @@ def remove_duplicates(file_path: str, comparison_mode: str = "case-insensitive",
         
         # Setup progress bar or spinner based on file size
         pbar = None
+        bar_cm = None
+        bar_tick = None
         spinner = None
-        if show_progress:
+        if show_progress and not dashboard:
             if file_size > chunk_size:
-                pbar = tqdm(total=file_size, unit='B', unit_scale=True, desc=f"Processing {os.path.basename(file_path)}")
+                if _alive_bar is not None and _isatty(sys.stdout):
+                    bar_cm = alive_bar(file_size, title=f"Processing {os.path.basename(file_path)}")
+                    bar_tick = bar_cm.__enter__()
+                else:
+                    pbar = tqdm(total=file_size, unit='B', unit_scale=True, desc=f"Processing {os.path.basename(file_path)}")
             else:
                 spinner = Spinner(f"Processing {os.path.basename(file_path)}")
                 spinner.start()
@@ -429,7 +502,9 @@ def remove_duplicates(file_path: str, comparison_mode: str = "case-insensitive",
 
         try:
             for chunk in chunk_reader(file_path, chunk_size):
-                if pbar:
+                if bar_tick:
+                    bar_tick(len('\n'.join(chunk).encode(encoding, errors='ignore')))
+                elif pbar:
                     pbar.update(len('\n'.join(chunk).encode(encoding, errors='ignore')))
                 
                 # Process this chunk of lines
@@ -459,6 +534,8 @@ def remove_duplicates(file_path: str, comparison_mode: str = "case-insensitive",
             logging.error(f"Error processing file {file_path}: {str(e)}")
             if pbar:
                 pbar.close()
+            if bar_cm:
+                bar_cm.__exit__(None, None, None)
             if spinner:
                 spinner.stop()
             if dash:
@@ -468,6 +545,8 @@ def remove_duplicates(file_path: str, comparison_mode: str = "case-insensitive",
         # Close progress tracking
         if pbar:
             pbar.close()
+        if bar_cm:
+            bar_cm.__exit__(None, None, None)
         if spinner:
             spinner.stop()
         if dash:
@@ -734,11 +813,13 @@ def process_lines(lines: List[str], comparison_mode: str, show_progress: bool,
         if not line.endswith('\n') and line:
             line = line + '\n'
             
-        # Skip processing for empty lines
+        # Normalize blank/whitespace-only lines globally (important for chunked processing)
         if not line.strip():
-            # Only add empty line if we haven't seen it before (preserve some formatting)
-            if not any(l.strip() == '' for l in unique_lines[-3:] if unique_lines):
-                unique_lines.append(line)
+            normalized = "__BLANK__"
+            if normalized in seen_exact:
+                continue
+            seen_exact.add(normalized)
+            unique_lines.append(line)
             continue
         
         # Skip lines matching the exclude pattern
@@ -847,6 +928,12 @@ def process_multiple_files(file_paths: List[str], comparison_mode: str,
     
     show_file_progress = show_progress and not parallel
 
+    file_bar_cm = None
+    file_bar_tick = None
+    if show_progress and not dashboard and _alive_bar is not None and _isatty(sys.stdout) and len(file_paths) > 1:
+        file_bar_cm = alive_bar(len(file_paths), title="Files")
+        file_bar_tick = file_bar_cm.__enter__()
+
     if parallel and len(file_paths) > 1:
         results = [None] * len(file_paths)
 
@@ -873,9 +960,15 @@ def process_multiple_files(file_paths: List[str], comparison_mode: str,
                 try:
                     idx, res = fut.result()
                     results[idx] = res
+                    if file_bar_tick:
+                        file_bar_tick()
                 except Exception as e:
                     logging.error(f"Failed to process file in parallel: {str(e)}")
+                    if file_bar_tick:
+                        file_bar_tick()
 
+        if file_bar_cm:
+            file_bar_cm.__exit__(None, None, None)
         return [r if r is not None else {"file_path": file_paths[idx], "error": "Unknown error"} for idx, r in enumerate(results)]
 
     results = []
@@ -902,11 +995,17 @@ def process_multiple_files(file_paths: List[str], comparison_mode: str,
             logging.info(f"  Original line count: {result['total_lines']}")
             logging.info(f"  Unique lines: {result['unique_lines']}")
             logging.info(f"  Duplicates removed: {result['duplicates_removed']}")
+            if file_bar_tick:
+                file_bar_tick()
 
         except Exception as e:
             logging.error(f"Failed to process {file_path}: {str(e)}")
             results.append({"file_path": file_path, "error": str(e)})
+            if file_bar_tick:
+                file_bar_tick()
 
+    if file_bar_cm:
+        file_bar_cm.__exit__(None, None, None)
     return results
 
 
@@ -1181,7 +1280,7 @@ def generate_report(
     return report
 
 
-def parse_arguments():
+def parse_arguments(argv: Optional[List[str]] = None):
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
         description="Remove duplicate lines from text files with various options."
@@ -1370,6 +1469,12 @@ def parse_arguments():
     )
 
     other_group.add_argument(
+        "--no-color",
+        action="store_true",
+        help="Disable ANSI colors in terminal output"
+    )
+
+    other_group.add_argument(
         "--dashboard",
         action="store_true",
         help="Show a live terminal dashboard while processing"
@@ -1381,18 +1486,19 @@ def parse_arguments():
         help="Suppress all non-error output"
     )
     
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
-def main():
-    args = parse_arguments()
+def cli_main(argv: Optional[List[str]] = None) -> int:
+    args = parse_arguments(argv)
 
-    setup_logging(args.verbose, args.log_file)
+    use_color = not args.no_color
+    setup_logging(args.verbose, args.log_file, use_color=use_color)
     
     # Check for version flag first
     if args.version:
         print(f"DupeRemover version {__version__}")
-        sys.exit(0)
+        return 0
     
     # Configure logging based on verbosity
     if args.verbose:
@@ -1404,18 +1510,18 @@ def main():
     # Check for required files
     if not args.files and not args.directory and not args.stdin:
         logger.error("No input files specified and --stdin not used")
-        sys.exit(1)
+        return 1
     
     # Handle streaming mode if enabled
     if args.stream:
         if len(args.files) != 1 and not args.stdin:
             logger.error("Streaming mode requires exactly one input file or stdin")
-            sys.exit(1)
+            return 1
         
         input_file = args.files[0] if args.files else "-"
         if input_file == "-":
             logger.error("Streaming from stdin not implemented yet")
-            sys.exit(1)
+            return 1
             
         logger.info(f"Starting streaming mode for {input_file}")
         stream_stats = stream_process_file(
@@ -1447,11 +1553,17 @@ def main():
                 }
             }
 
-            report = generate_report(report_data, report_type=args.report, output_file=args.report_file, use_color=args.color)
+            stream_report_use_color = False
+            if args.report_file:
+                stream_report_use_color = args.color and use_color
+            else:
+                stream_report_use_color = (args.color or _isatty(sys.stdout)) and use_color
+
+            report = generate_report(report_data, report_type=args.report, output_file=args.report_file, use_color=stream_report_use_color)
             if not args.report_file:
                 print(report, end="")
         
-        sys.exit(0)
+        return 0
     
     file_paths: List[str] = []
     if args.directory:
@@ -1504,11 +1616,21 @@ def main():
         )
 
     if args.report:
-        report = generate_report(results, report_type=args.report, output_file=args.report_file, use_color=args.color)
+        report_use_color = False
+        if args.report_file:
+            report_use_color = args.color and use_color
+        else:
+            report_use_color = (args.color or _isatty(sys.stdout)) and use_color
+
+        report = generate_report(results, report_type=args.report, output_file=args.report_file, use_color=report_use_color)
         if not args.report_file:
             print(report, end="")
 
-    sys.exit(0)
+    return 0
+
+
+def main():
+    raise SystemExit(cli_main())
 
 
 def stream_process_file(
@@ -1524,6 +1646,7 @@ def stream_process_file(
     max_runtime: Optional[float] = None,
     dashboard: bool = False,
     stream_output: Optional[str] = None,
+    stop_event: Optional[threading.Event] = None,
 ) -> Dict:
     """
     Process a file in streaming mode, handling new content as it is added.
@@ -1543,16 +1666,15 @@ def stream_process_file(
     Returns:
         Statistics about the processed file
     """
-    # Setup signal handling for graceful exit
     running = True
-    
-    def signal_handler(sig, frame):
-        nonlocal running
-        logger.info(f"Received signal {sig}, shutting down...")
-        running = False
-        
-    signal.signal(signal.SIGINT, signal_handler)
-    signal.signal(signal.SIGTERM, signal_handler)
+    if threading.current_thread() is threading.main_thread():
+        def signal_handler(sig, frame):
+            nonlocal running
+            logger.info(f"Received signal {sig}, shutting down...")
+            running = False
+
+        signal.signal(signal.SIGINT, signal_handler)
+        signal.signal(signal.SIGTERM, signal_handler)
     
     # Initialize statistics
     stats = {
@@ -1598,7 +1720,7 @@ def stream_process_file(
     logger.info(f"Mode: {mode}, Follow: {follow}")
     
     try:
-        while running:
+        while running and not (stop_event and stop_event.is_set()):
             current_size = os.path.getsize(file_path)
             
             # Check if file was truncated
